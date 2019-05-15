@@ -117,6 +117,29 @@ int ocl_app_t::extract_kernel(int pidx, const char *kname) {
   return kernels_.size() - 1;
 }
 
+int ocl_app_t::add_sampler(cl_bool normalized_coords, cl_addressing_mode amode,
+                           cl_filter_mode filter) {
+  cl_int ret;
+  cl_sampler s;
+
+#if (CL_TARGET_OPENCL_VERSION > 120)
+  cl_sampler_properties properties[] = {CL_SAMPLER_NORMALIZED_COORDS,
+                                        normalized_coords,
+                                        CL_SAMPLER_ADDRESSING_MODE,
+                                        amode,
+                                        CL_SAMPLER_FILTER_MODE,
+                                        filter,
+                                        0};
+  s = clCreateSamplerWithProperties(context_, properties, &ret);
+#else
+  s = clCreateSampler(context_, normalized_coords, amode, filter, &ret);
+#endif
+
+  CHECK_ERR(ret);
+  samplers_.push_back(s);
+  return samplers_.size() - 1;
+}
+
 void ocl_app_t::set_kernel_buf_arg(int kidx, int narg, int bidx) {
   cl_int ret;
   cl_kernel k = kernels_.at(kidx);
@@ -143,6 +166,14 @@ void ocl_app_t::set_kernel_localbuf_arg(int kidx, int narg, int argsz) {
   cl_int ret;
   cl_kernel k = kernels_.at(kidx);
   ret = clSetKernelArg(k, narg, argsz, NULL);
+  CHECK_ERR(ret);
+}
+
+void ocl_app_t::set_kernel_sampler_arg(int kidx, int narg, int sidx) {
+  cl_int ret;
+  cl_kernel k = kernels_.at(kidx);
+  cl_sampler s = samplers_.at(sidx);
+  ret = clSetKernelArg(k, narg, sizeof(cl_sampler), static_cast<void *>(&s));
   CHECK_ERR(ret);
 }
 

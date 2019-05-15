@@ -8,7 +8,8 @@
 const char *rotkernel = STRINGIFY(
     __kernel void rotation(__global uchar *input, __global uchar *output,
                            int width, int height, float theta) {
-      int x, y, xr, yr, sz;
+      int x, y, sz;
+      int xr, yr;
       float x0, y0, xprime, yprime;
 
       x = get_global_id(0);
@@ -28,9 +29,10 @@ const char *rotkernel = STRINGIFY(
       output[y * width + x + sz * 1] = 0;
       output[y * width + x + sz * 2] = 0;
       if ((xr < width) && (yr < height) && (xr > 0) && (yr > 0)) {
-        output[y * width + x + sz * 0] = input[yr * width + xr + sz * 0];
-        output[y * width + x + sz * 1] = input[yr * width + xr + sz * 1];
-        output[y * width + x + sz * 2] = input[yr * width + xr + sz * 2];
+        int npos = yr * width + xr;
+        output[y * width + x + sz * 0] = input[npos + sz * 0];
+        output[y * width + x + sz * 1] = input[npos + sz * 1];
+        output[y * width + x + sz * 2] = input[npos + sz * 2];
       }
     });
 
@@ -58,7 +60,7 @@ ocl_rotate(oclwrap2::ocl_app_t &app, int kidx,
   app.set_kernel_float_arg(kidx, 4, theta);
 
   size_t globalws[2] = {static_cast<size_t>(imw), static_cast<size_t>(imh)};
-  size_t localws[2] = {4, 4};
+  size_t localws[2] = {1, 1};
 
   app.exec_kernel_nd(kidx, 2, globalws, localws);
   app.read_buffer<unsigned char>(outimg, outimage.data(), imsz);
@@ -81,12 +83,12 @@ int main(int argc, char **argv) {
   cimg_library::CImg<unsigned char> image(imname);
   std::cout << "Loaded image " << imname << std::endl;
 
-  const float theta = 45.0f * 3.14f / 180.0f;
+  const float theta = 45.0f * 3.141592f / 180.0f;
   auto outimage = ocl_rotate(app, kidx, image, theta);
 
-  const float theta2 = 1.0f * 3.14f / 180.0f;
+  const float theta2 = 5.0f * 3.141592f / 180.0f;
   auto interpimage = ocl_rotate(app, kidx, image, theta2);
-  for (int i = 1; i < 45; ++i)
+  for (int i = 1; i < 72; ++i)
     interpimage = ocl_rotate(app, kidx, interpimage, theta2);
 
   cimg_library::CImgDisplay main_disp(image, "Input image");

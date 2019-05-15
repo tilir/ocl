@@ -105,10 +105,10 @@ int main(int argc, char **argv) {
   cimg_library::CImg<unsigned char> image(imname);
   std::cout << "Loaded image " << imname << std::endl;
 
-  const float theta = 45.0f * 3.14f / 180.0f;
+  const float theta = 45.0f * 3.141592f / 180.0f;
   auto outimage = ocl_rotate(app, kidx, image, theta);
 
-  const float theta2 = 1.0f * 3.14f / 180.0f;
+  const float theta2 = 1.0f * 3.141592f / 180.0f;
   auto interpimage = ocl_rotate(app, kidx, image, theta2);
   for (int i = 1; i < 45; ++i)
     interpimage = ocl_rotate(app, kidx, interpimage, theta2);

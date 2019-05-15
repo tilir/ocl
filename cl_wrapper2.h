@@ -40,6 +40,7 @@ class ocl_app_t {
   std::vector<cl_program> programs_;
   std::vector<cl_kernel> kernels_;
   std::vector<cl_event> events_;
+  std::vector<cl_sampler> samplers_;
 
 public:
   ocl_app_t();
@@ -60,10 +61,13 @@ public:
   int add_2d_image(int w, int h, int s, T *buf, cl_channel_order ord,
                    cl_channel_type ctp, cl_mem_flags flags);
 
+  int add_sampler(cl_bool normalized_coords, cl_addressing_mode amode, cl_filter_mode filter);
+
   void set_kernel_buf_arg(int kidx, int narg, int bidx);
   void set_kernel_int_arg(int kidx, int narg, int arg);
   void set_kernel_float_arg(int kidx, int narg, float arg);
   void set_kernel_localbuf_arg(int kidx, int narg, int argsz);
+  void set_kernel_sampler_arg(int kidx, int narg, int sidx);
 
   // inorder interface (without events)
 public:

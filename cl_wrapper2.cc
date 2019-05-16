@@ -29,7 +29,11 @@ static void cl_notify_fn(const char *errinfo, const void *private_info,
 
 ocl_app_t::ocl_app_t() {
   cl_int ret;
-  platform_id_ = select_platform();
+
+  init_devices();
+
+  nplatform_ = select_platform();
+  platform_id_ = platforms_[nplatform_];
   device_id_ = select_device();
 
   context_ = clCreateContext(NULL, 1, &device_id_, cl_notify_fn, NULL, &ret);
@@ -140,6 +144,19 @@ int ocl_app_t::add_sampler(cl_bool normalized_coords, cl_addressing_mode amode,
   return samplers_.size() - 1;
 }
 
+int ocl_app_t::add_pipe(cl_mem_flags flags, cl_uint psize, cl_uint pcount) {
+#if (CL_TARGET_OPENCL_VERSION > 120)
+  cl_int ret;
+  cl_mem pipeobj = clCreatePipe(context_, flags, psize, pcount, NULL, &ret);
+  CHECK_ERR(ret);
+  memobjs_.push_back(std::make_pair(pipeobj, 0));
+  return memobjs_.size() - 1;
+#else  
+  (void) flags, psize, pcount;
+  throw std::runtime_error("OpenCL 2.0 required for pipes");
+#endif
+}
+
 void ocl_app_t::set_kernel_buf_arg(int kidx, int narg, int bidx) {
   cl_int ret;
   cl_kernel k = kernels_.at(kidx);
@@ -209,6 +226,17 @@ std::string ocl_app_t::device_name() const {
   return get_device_param_str(device_id_, CL_DEVICE_NAME);
 }
 
+void ocl_app_t::dump_devices(std::ostream &os) const {
+  os << "Dumping platforms and devices:" << "\n" << "\n";
+  for (int pid = 0; pid < platforms_.size(); ++pid) {
+    auto platf = platforms_[pid];
+    os << "Platform: " << get_platform_param_str(platf, CL_PLATFORM_VERSION) << "\n";
+    for (auto dev : devices_[pid]) 
+      os << "Device: " << get_device_param_str(dev, CL_DEVICE_NAME) << "\n";
+    os << "\n";
+  }
+}
+
 size_t ocl_app_t::max_workgroup_size() const {
   cl_int ret;
   size_t res;
@@ -238,21 +266,37 @@ std::string ocl_app_t::get_platform_param_str(cl_platform_id pid,
   return result;
 }
 
-cl_platform_id ocl_app_t::select_platform() const {
-  cl_uint nplatforms;
-  std::vector<cl_platform_id> ids;
+void ocl_app_t::init_devices() {
+  cl_int ret;
+  cl_uint nplatforms, numdevices;
 
-  cl_int ret = clGetPlatformIDs(0, NULL, &nplatforms);
+  ret = clGetPlatformIDs(0, NULL, &nplatforms);
   CHECK_ERR(ret);
   if (nplatforms < 1)
     throw std::runtime_error("There shall be at least one platform");
 
-  ids.resize(nplatforms);
-  ret = clGetPlatformIDs(nplatforms, ids.data(), NULL);
+  platforms_.resize(nplatforms);
+  ret = clGetPlatformIDs(nplatforms, platforms_.data(), NULL);
   CHECK_ERR(ret);
 
+  devices_.resize(nplatforms);
+
+  for (int n = 0; n != nplatforms; ++n) {
+    auto plid = platforms_[n];
+    ret = clGetDeviceIDs(plid, CL_DEVICE_TYPE_ALL, 0, NULL, &numdevices);
+    CHECK_ERR(ret);
+    if (numdevices < 1)
+      throw std::runtime_error("There shall be at least one device");
+    devices_[n].resize(numdevices);
+    ret = clGetDeviceIDs(plid, CL_DEVICE_TYPE_ALL, numdevices,
+                         devices_[n].data(), NULL);
+    CHECK_ERR(ret);
+  }
+}
+
+int ocl_app_t::select_platform() const {
   auto supported_it =
-      std::find_if(ids.begin(), ids.end(), [this](cl_platform_id pid) {
+      std::find_if(platforms_.begin(), platforms_.end(), [this](cl_platform_id pid) {
         std::string ver = get_platform_param_str(pid, CL_PLATFORM_VERSION);
         std::stringstream ss;
         ss << ver;
@@ -262,14 +306,19 @@ cl_platform_id ocl_app_t::select_platform() const {
 #if (CL_TARGET_OPENCL_VERSION > 120)
         return (major >= 2);
 #else
-          return (major < 2);
+        return (major < 2);
 #endif
       });
 
-  if (supported_it == ids.end())
+  if (supported_it == platforms_.end())
+#if (CL_TARGET_OPENCL_VERSION > 120)
     throw std::runtime_error("No supported OpenCL 2.0 platform");
+#else
+    throw std::runtime_error("No supported OpenCL 1.2 platform");
+#endif
 
-  return *supported_it;
+  int nplatform = std::distance(platforms_.begin(), supported_it);  
+  return nplatform;
 }
 
 std::string ocl_app_t::get_device_param_str(cl_device_id devid,
@@ -288,19 +337,10 @@ std::string ocl_app_t::get_device_param_str(cl_device_id devid,
 
 cl_device_id ocl_app_t::select_device() const {
   cl_int ret;
-  cl_uint numdevices;
-  ret = clGetDeviceIDs(platform_id_, CL_DEVICE_TYPE_ALL, 0, NULL, &numdevices);
-  CHECK_ERR(ret);
-  if (numdevices < 1)
-    throw std::runtime_error("There shall be at least one device");
-  std::vector<cl_device_id> possible_devs(numdevices);
-  ret = clGetDeviceIDs(platform_id_, CL_DEVICE_TYPE_ALL, numdevices,
-                       possible_devs.data(), NULL);
-  CHECK_ERR(ret);
 
   // selecting one with max #of CUs or max size of WG
   auto seldev_it =
-      std::max_element(possible_devs.begin(), possible_devs.end(),
+      std::max_element(devices_[nplatform_].begin(), devices_[nplatform_].end(),
                        [this](cl_device_id fst, cl_device_id snd) {
 #if defined(MAXCU_STRATEGY)
                          return get_device_param_scalar<cl_uint>(
@@ -315,7 +355,7 @@ cl_device_id ocl_app_t::select_device() const {
 #endif
                        });
 
-  if (seldev_it == possible_devs.end())
+  if (seldev_it == devices_[nplatform_].end())
     throw std::runtime_error("No device chosen");
 
   return *seldev_it;

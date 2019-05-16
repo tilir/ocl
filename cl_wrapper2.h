@@ -16,6 +16,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <iostream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,11 +31,16 @@ namespace oclwrap2 {
 
 void cl_process_error(cl_int ret, const char *file, int line);
 
-class ocl_app_t {
+class ocl_app_t {  
+  int nplatform_;
+
   cl_platform_id platform_id_;
   cl_device_id device_id_;
   cl_context context_;
   cl_command_queue command_queue_;
+
+  std::vector<cl_platform_id> platforms_;
+  std::vector<std::vector<cl_device_id>> devices_;
 
   std::vector<std::pair<cl_mem, size_t>> memobjs_;
   std::vector<cl_program> programs_;
@@ -62,6 +68,7 @@ public:
                    cl_channel_type ctp, cl_mem_flags flags);
 
   int add_sampler(cl_bool normalized_coords, cl_addressing_mode amode, cl_filter_mode filter);
+  int add_pipe(cl_mem_flags flags, cl_uint psize, cl_uint pcount);
 
   void set_kernel_buf_arg(int kidx, int narg, int bidx);
   void set_kernel_int_arg(int kidx, int narg, int arg);
@@ -87,12 +94,14 @@ public:
   std::string platform_version() const;
   std::string device_name() const;
   size_t max_workgroup_size() const;
+  void dump_devices(std::ostream &os) const;
 
   // construction helpers
 private:
+  void init_devices();
   std::string get_platform_param_str(cl_platform_id pid,
                                      cl_platform_info pname) const;
-  cl_platform_id select_platform() const;
+  int select_platform() const;
 
   template <typename T>
   T get_device_param_scalar(cl_device_id devid, cl_device_info pname) const;
@@ -211,3 +220,4 @@ T ocl_app_t::get_device_param_scalar(cl_device_id devid,
 }
 
 } // namespace oclwrap2
+

@@ -137,9 +137,9 @@ int main() {
   int pidx = app.add_programm(mmkernel);
   int kidx = app.extract_kernel(pidx, "simple_multiply");
 
-  int asz = BIG_AX * BIG_AY;
-  int bsz = BIG_AY * BIG_BY;
-  int csz = BIG_AX * BIG_BY;
+  size_t asz = BIG_AX * BIG_AY;
+  size_t bsz = BIG_AY * BIG_BY;
+  size_t csz = BIG_AX * BIG_BY;
 
   int abuf = app.add_buffer<int>(CL_MEM_READ_ONLY, &a[0][0], asz);
   int bbuf = app.add_buffer<int>(CL_MEM_READ_ONLY, &b[0][0], bsz);

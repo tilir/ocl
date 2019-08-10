@@ -32,6 +32,10 @@ ocl_app_t::ocl_app_t() {
 
   init_devices();
 
+#if DEBUG_DEVICES
+  dump_devices(std::cerr);
+#endif
+
   nplatform_ = select_platform();
   platform_id_ = platforms_[nplatform_];
   device_id_ = select_device();
@@ -266,29 +270,44 @@ std::string ocl_app_t::get_platform_param_str(cl_platform_id pid,
   return result;
 }
 
+#ifdef CPU_ALSO
+#define TARGET_DEVICE CL_DEVICE_TYPE_ALL
+#else
+#define TARGET_DEVICE CL_DEVICE_TYPE_GPU
+#endif
+
 void ocl_app_t::init_devices() {
   cl_int ret;
   cl_uint nplatforms, numdevices;
+  std::vector<cl_platform_id> unfiltered_platforms;
 
   ret = clGetPlatformIDs(0, NULL, &nplatforms);
   CHECK_ERR(ret);
   if (nplatforms < 1)
     throw std::runtime_error("There shall be at least one platform");
 
-  platforms_.resize(nplatforms);
-  ret = clGetPlatformIDs(nplatforms, platforms_.data(), NULL);
+  unfiltered_platforms.resize(nplatforms);
+  ret = clGetPlatformIDs(nplatforms, unfiltered_platforms.data(), NULL);
   CHECK_ERR(ret);
+
+  for (auto plid : unfiltered_platforms) {
+    ret = clGetDeviceIDs(plid, TARGET_DEVICE, 0, NULL, &numdevices);
+    if (ret != CL_DEVICE_NOT_FOUND) {
+      CHECK_ERR(ret);
+      platforms_.push_back(plid);
+    }
+  }
+
+  nplatforms = platforms_.size();
+  if (nplatforms == 0)    
+    throw std::runtime_error("No platforms selected");
 
   devices_.resize(nplatforms);
 
   for (int n = 0; n != nplatforms; ++n) {
     auto plid = platforms_[n];
-    ret = clGetDeviceIDs(plid, CL_DEVICE_TYPE_ALL, 0, NULL, &numdevices);
-    CHECK_ERR(ret);
-    if (numdevices < 1)
-      throw std::runtime_error("There shall be at least one device");
     devices_[n].resize(numdevices);
-    ret = clGetDeviceIDs(plid, CL_DEVICE_TYPE_ALL, numdevices,
+    ret = clGetDeviceIDs(plid, TARGET_DEVICE, numdevices,
                          devices_[n].data(), NULL);
     CHECK_ERR(ret);
   }

@@ -1,3 +1,11 @@
+//-----------------------------------------------------------------------------
+//
+// cl_platform.c
+//
+// Enumerating platforms and devices, OpenCL C way
+//
+//-----------------------------------------------------------------------------
+
 #include <assert.h>
 #include <stdio.h>
 #include "CL/cl.h"
@@ -49,8 +57,7 @@ get_platforms() {
   return p;
 }
 
-enum { MAX_DEVICES = 256,
-       STRING_BUFSIZE = 1024 };
+enum { STRING_BUFSIZE = 1024 };
 
 void print_platform_info(cl_platform_id pid) {
   cl_int ret;
@@ -126,13 +133,23 @@ int main() {
   for (i = 0; i < platforms.n; ++i) {
     cl_int ret;
     cl_uint numdevices;
-    cl_device_id devices[MAX_DEVICES];
+    cl_device_id *devices;
 
     print_platform_info(platforms.ids[i]);    
-    ret = clGetDeviceIDs(platforms.ids[i], CL_DEVICE_TYPE_ALL, MAX_DEVICES, devices, &numdevices); 
+
+    ret = clGetDeviceIDs(platforms.ids[i], CL_DEVICE_TYPE_ALL, 0, NULL, &numdevices); 
     CHECK_ERR(ret);
+
+    devices = (cl_device_id *) malloc(numdevices * sizeof(cl_device_id));
+    assert(devices);
+
+    ret = clGetDeviceIDs(platforms.ids[i], CL_DEVICE_TYPE_ALL, numdevices, devices, NULL); 
+    CHECK_ERR(ret);
+
     for (j = 0; j < numdevices; ++j)
       print_device_info(devices[j]);
+
+    free(devices);
   }
 
   free(platforms.ids);

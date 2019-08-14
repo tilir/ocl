@@ -21,6 +21,52 @@ const char *mmkernel = STRINGIFY(__kernel void simple_multiply(
   C[row * BY + col] = sum;
 });
 
+#if defined(SIMPLEST)
+#define TS 1
+#else
+#define TS 16
+#endif
+
+#if defined(SIMPLEST) && !defined(MEASURE_NORMAL)
+#define MEASURE_NORMAL 1
+#endif
+
+// Tiled and coalesced version
+const char *mmkernel2 = STRINGIFY(__kernel void advanced_multiply(
+__global int *A, __global int *B, __global int *C, int AX, int AY, int BY) {
+  int k, t;
+  const int row = get_local_id(0); // Local row ID (max: TS)
+  const int col = get_local_id(1); // Local col ID (max: TS)
+  const int globalRow = TS * get_group_id(0) + row; // Row ID of C (0..M)
+  const int globalCol = TS * get_group_id(1) + col; // Col ID of C (0..N)
+
+  __local int Asub[TS][TS];
+  __local int Bsub[TS][TS];
+
+  int acc = 0;
+  
+  const int numTiles = AY / TS;
+
+  for (t = 0; t < numTiles; t++) {
+    const int tiledRow = TS * t + row;
+    const int tiledCol = TS * t + col;
+    Asub[col][row] = A[globalRow * AY + tiledCol];
+    Bsub[col][row] = B[tiledRow * BY + globalCol];
+
+    // Synchronise to make sure the tile is loaded
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (k = 0; k < TS; k++)
+      acc += Asub[k][row] * Bsub[col][k];
+
+    // Synchronise before loading the next tile
+    barrier(CLK_LOCAL_MEM_FENCE);
+  }
+
+  // Store the final result in C
+  C[globalRow * BY + globalCol] = acc;
+});
+
 // simplest smoke test
 #if defined(SIMPLEST)
 
@@ -67,14 +113,15 @@ constexpr int BIG_BY = CXVAL;
 // A[AX][AY] * B[AY][BY] = C[AX][BY]
 void matrix_mult_normal(const int *A, const int *B, int *C, int AX, int AY,
                         int BY) {
-  for (int i = 0; i < AX; i++)
-    for (int j = 0; j < BY; j++) {
-      C[i * BY + j] = 0;
-      // Multiply and accumulate the values in the current row
-      // of A and column of B
-      for (int k = 0; k < AY; k++)
-        C[i * BY + j] += A[i * AY + k] * B[k * BY + j];
+  int i, j, k;
+  for (i = 0; i < AX; i++) {    
+    for (j = 0; j < BY; j++) {
+      int acc = 0;
+      for (k = 0; k < AY; k++)
+        acc += A[i * AY + k] * B[k * BY + j];
+      C[i * BY + j] = acc;
     }
+  }
 }
 
 // to exclude silly errors
@@ -134,8 +181,13 @@ int main() {
 
   tstart = chrono::high_resolution_clock::now();
 
+#ifdef SIMPLE_KERNEL
   int pidx = app.add_programm(mmkernel);
   int kidx = app.extract_kernel(pidx, "simple_multiply");
+#else
+  int pidx = app.add_programm(mmkernel2);
+  int kidx = app.extract_kernel(pidx, "advanced_multiply");
+#endif
 
   size_t asz = BIG_AX * BIG_AY;
   size_t bsz = BIG_AY * BIG_BY;
@@ -154,11 +206,7 @@ int main() {
   app.set_kernel_int_arg(kidx, 5, BIG_BY);
 
   size_t globalws[2] = {BIG_AX, BIG_BY};
-#if !defined(SIMPLEST)
-  size_t localws[2] = {16, 16};
-#else
-  size_t localws[2] = {1, 1};
-#endif
+  size_t localws[2] = {TS, TS};
   tfin = chrono::high_resolution_clock::now();
   std::cout
       << "Setup time: "

@@ -23,7 +23,8 @@
 
 #include <CL/cl.h>
 
-#define STRINGIFY(...) #__VA_ARGS__
+#define STRINGIFY1(...) #__VA_ARGS__
+#define STRINGIFY(...) STRINGIFY1(__VA_ARGS__)
 
 #define CHECK_ERR(ret) cl_process_error(ret, __FILE__, __LINE__)
 

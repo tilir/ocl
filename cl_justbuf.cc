@@ -1,5 +1,5 @@
 #include <iostream>
-#include <stdexcept>	
+#include <stdexcept>
 #include <vector>
 
 #define __CL_ENABLE_EXCEPTIONS
@@ -8,6 +8,7 @@
 class ocl_ctx_t {
   cl::Context context;
   cl::CommandQueue queue;
+
 public:
   ocl_ctx_t(cl_mem_flags flags) : context(flags), queue(context) {}
   void process_buffers();
@@ -18,7 +19,7 @@ int main() {
     ocl_ctx_t ct(CL_DEVICE_TYPE_GPU);
     ct.process_buffers();
   } catch (cl::Error err) {
-    std::cerr << "ERROR: " << err.what() << ":\n";    
+    std::cerr << "ERROR: " << err.what() << ":\n";
     return -1;
   }
 }
@@ -28,9 +29,11 @@ constexpr size_t BUFSZ = 128;
 class buf_write_error : public std::runtime_error {
   const char *msg_;
   int Bi_, i_;
+
 public:
-  buf_write_error(const char *msg, int Bi, int i) : std::runtime_error(msg), Bi_(Bi), i_(i) {}
-  const char* what() const noexcept override {
+  buf_write_error(const char *msg, int Bi, int i)
+      : std::runtime_error(msg), Bi_(Bi), i_(i) {}
+  const char *what() const noexcept override {
     return std::runtime_error::what();
   }
 };
@@ -54,4 +57,3 @@ void ocl_ctx_t::process_buffers() {
 
   std::cout << "Everything is correct" << std::endl;
 }
-

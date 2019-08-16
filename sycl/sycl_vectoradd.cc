@@ -1,7 +1,7 @@
 #include <CL/sycl.hpp>
 
-#include <vector>
 #include <iostream>
+#include <vector>
 
 constexpr auto sycl_read = cl::sycl::access::mode::read;
 constexpr auto sycl_write = cl::sycl::access::mode::write;
@@ -14,11 +14,12 @@ template <typename T> class simple_vector_add;
 
 class ocl_ctx_t {
   cl::sycl::queue deviceQueue;
+
 public:
-  ocl_ctx_t(const cl::sycl::device_selector &sel): deviceQueue(sel) {}
+  ocl_ctx_t(const cl::sycl::device_selector &sel) : deviceQueue(sel) {}
 
   template <typename T>
-  void process_buffers(T const * pa, T const * pb, T * pc, size_t sz);
+  void process_buffers(T const *pa, T const *pb, T *pc, size_t sz);
 };
 
 int main() {
@@ -43,20 +44,20 @@ int main() {
       }
 
     std::cout << "Everything is correct" << std::endl;
-  } catch (cl::sycl::exception const& err) {
-    std::cerr << "ERROR: " << err.what() << ":\n";    
+  } catch (cl::sycl::exception const &err) {
+    std::cerr << "ERROR: " << err.what() << ":\n";
     return -1;
   }
 }
 
-template <typename T> void 
-ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
+template <typename T>
+void ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
   cl::sycl::range<1> numOfItems{sz};
   cl::sycl::buffer<T, 1> bufferA(pa, numOfItems);
   cl::sycl::buffer<T, 1> bufferB(pb, numOfItems);
   cl::sycl::buffer<T, 1> bufferC(pc, numOfItems);
 
-  deviceQueue.submit([&](cl::sycl::handler& cgh) {
+  deviceQueue.submit([&](cl::sycl::handler &cgh) {
     auto accessorA = bufferA.template get_access<sycl_read>(cgh);
     auto accessorB = bufferB.template get_access<sycl_read>(cgh);
     auto accessorC = bufferC.template get_access<sycl_write>(cgh);
@@ -67,4 +68,3 @@ ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
     cgh.parallel_for<class simple_vector_add<T>>(numOfItems, kern);
   });
 }
-

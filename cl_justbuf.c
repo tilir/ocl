@@ -6,10 +6,10 @@
 //
 //-----------------------------------------------------------------------------
 
+#include "CL/cl.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "CL/cl.h"
 
 static void cl_notify_fn(const char *errinfo, const void *private_info,
                          size_t cb, void *user_data);
@@ -25,15 +25,16 @@ struct ocl_ctx_t {
 
 void process_buffers(struct ocl_ctx_t *ct);
 
-int main() {  
-  size_t ndevs;  
+int main() {
+  size_t ndevs;
   cl_int ret;
   cl_device_id *devs;
   struct ocl_ctx_t ct;
 
   // minimalistic setup
- 
-  ct.ctx = clCreateContextFromType(NULL, CL_DEVICE_TYPE_GPU, &cl_notify_fn, NULL, &ret);
+
+  ct.ctx = clCreateContextFromType(NULL, CL_DEVICE_TYPE_GPU, &cl_notify_fn,
+                                   NULL, &ret);
   CHECK_ERR(ret);
 
   ret = clGetContextInfo(ct.ctx, CL_CONTEXT_DEVICES, 0, NULL, &ndevs);
@@ -41,7 +42,7 @@ int main() {
 
   assert(ndevs > 0);
 
-  devs = (cl_device_id *) malloc(ndevs * sizeof(cl_device_id));
+  devs = (cl_device_id *)malloc(ndevs * sizeof(cl_device_id));
   ret = clGetContextInfo(ct.ctx, CL_CONTEXT_DEVICES, ndevs, devs, NULL);
   CHECK_ERR(ret);
 
@@ -52,7 +53,7 @@ int main() {
 
   process_buffers(&ct);
 
-  // minimalistic teardown 
+  // minimalistic teardown
 
   ret = clFlush(ct.que);
   CHECK_ERR(ret);
@@ -80,7 +81,7 @@ void process_buffers(struct ocl_ctx_t *pct) {
   for (i = 0; i < BUFSZ; ++i)
     A[i] = i * i;
 
-  oclbuf = clCreateBuffer(pct->ctx, CL_MEM_READ_WRITE, BUFSZ * sizeof(int), 
+  oclbuf = clCreateBuffer(pct->ctx, CL_MEM_READ_WRITE, BUFSZ * sizeof(int),
                           NULL, &ret);
   CHECK_ERR(ret);
 
@@ -107,7 +108,7 @@ void process_buffers(struct ocl_ctx_t *pct) {
 
 void cl_process_error(cl_int ret, const char *file, int line) {
   const char *cause = "unknown";
-  switch(ret) {
+  switch (ret) {
   case CL_SUCCESS:
     return;
   case CL_INVALID_VALUE:

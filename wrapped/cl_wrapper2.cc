@@ -155,8 +155,8 @@ int ocl_app_t::add_pipe(cl_mem_flags flags, cl_uint psize, cl_uint pcount) {
   CHECK_ERR(ret);
   memobjs_.push_back(std::make_pair(pipeobj, 0));
   return memobjs_.size() - 1;
-#else  
-  (void) flags, psize, pcount;
+#else
+  (void)flags, psize, pcount;
   throw std::runtime_error("OpenCL 2.0 required for pipes");
 #endif
 }
@@ -231,11 +231,14 @@ std::string ocl_app_t::device_name() const {
 }
 
 void ocl_app_t::dump_devices(std::ostream &os) const {
-  os << "Dumping platforms and devices:" << "\n" << "\n";
+  os << "Dumping platforms and devices:"
+     << "\n"
+     << "\n";
   for (int pid = 0; pid < platforms_.size(); ++pid) {
     auto platf = platforms_[pid];
-    os << "Platform: " << get_platform_param_str(platf, CL_PLATFORM_VERSION) << "\n";
-    for (auto dev : devices_[pid]) 
+    os << "Platform: " << get_platform_param_str(platf, CL_PLATFORM_VERSION)
+       << "\n";
+    for (auto dev : devices_[pid])
       os << "Device: " << get_device_param_str(dev, CL_DEVICE_NAME) << "\n";
     os << "\n";
   }
@@ -299,7 +302,7 @@ void ocl_app_t::init_devices() {
   }
 
   nplatforms = platforms_.size();
-  if (nplatforms == 0)    
+  if (nplatforms == 0)
     throw std::runtime_error("No platforms selected");
 
   devices_.resize(nplatforms);
@@ -307,15 +310,15 @@ void ocl_app_t::init_devices() {
   for (int n = 0; n != nplatforms; ++n) {
     auto plid = platforms_[n];
     devices_[n].resize(numdevices);
-    ret = clGetDeviceIDs(plid, TARGET_DEVICE, numdevices,
-                         devices_[n].data(), NULL);
+    ret = clGetDeviceIDs(plid, TARGET_DEVICE, numdevices, devices_[n].data(),
+                         NULL);
     CHECK_ERR(ret);
   }
 }
 
 int ocl_app_t::select_platform() const {
-  auto supported_it =
-      std::find_if(platforms_.begin(), platforms_.end(), [this](cl_platform_id pid) {
+  auto supported_it = std::find_if(
+      platforms_.begin(), platforms_.end(), [this](cl_platform_id pid) {
         std::string ver = get_platform_param_str(pid, CL_PLATFORM_VERSION);
         std::stringstream ss;
         ss << ver;
@@ -336,7 +339,7 @@ int ocl_app_t::select_platform() const {
     throw std::runtime_error("No supported OpenCL 1.2 platform");
 #endif
 
-  int nplatform = std::distance(platforms_.begin(), supported_it);  
+  int nplatform = std::distance(platforms_.begin(), supported_it);
   return nplatform;
 }
 

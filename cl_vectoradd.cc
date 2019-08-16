@@ -1,5 +1,5 @@
 #include <iostream>
-#include <stdexcept>	
+#include <stdexcept>
 #include <vector>
 
 #define __CL_ENABLE_EXCEPTIONS
@@ -19,11 +19,12 @@ const char *vakernel = STRINGIFY(__kernel void vector_add(
 class ocl_ctx_t {
   cl::Context context;
   cl::CommandQueue queue;
+
 public:
   ocl_ctx_t(cl_mem_flags flags) : context(flags), queue(context) {}
-  
+
   template <typename T>
-  void process_buffers(T const * pa, T const * pb, T * pc, size_t sz);
+  void process_buffers(T const *pa, T const *pb, T *pc, size_t sz);
 };
 
 int main() {
@@ -48,13 +49,13 @@ int main() {
 
     std::cout << "Everything is correct" << std::endl;
   } catch (cl::Error err) {
-    std::cerr << "ERROR: " << err.what() << ":\n";    
+    std::cerr << "ERROR: " << err.what() << ":\n";
     return -1;
   }
 }
 
-template <typename T> void 
-ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
+template <typename T>
+void ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
   size_t bufsz = sz * sizeof(T);
 
   cl::Buffer abuf(context, CL_MEM_READ_ONLY, bufsz);
@@ -65,7 +66,8 @@ ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
   cl::copy(queue, pb, pb + sz, bbuf);
 
   cl::Program program(std::string(vakernel), true);
-  cl::make_kernel<cl::Buffer, cl::Buffer, cl::Buffer> add_vecs(program, "vector_add");
+  cl::make_kernel<cl::Buffer, cl::Buffer, cl::Buffer> add_vecs(program,
+                                                               "vector_add");
   cl::NDRange global(sz);
   cl::NDRange local(64);
 
@@ -73,4 +75,3 @@ ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
 
   cl::copy(queue, cbuf, pc, pc + sz);
 }
-

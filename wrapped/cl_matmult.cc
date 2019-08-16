@@ -1,3 +1,14 @@
+//------------------------------------------------------------------------------
+//
+// Matrix multiplication with simple kernel (OpenCL vs serial CPU)
+//
+//------------------------------------------------------------------------------
+//
+// This file is licensed after LGPL v3
+// Look at: https://www.gnu.org/licenses/lgpl-3.0.en.html for details
+//
+//------------------------------------------------------------------------------
+
 #include <cassert>
 #include <chrono>
 #include <fstream>

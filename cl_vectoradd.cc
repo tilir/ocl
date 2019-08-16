@@ -1,3 +1,14 @@
+//-----------------------------------------------------------------------------
+//
+// Adding vectors in OpenCL, C++ way
+//
+//-----------------------------------------------------------------------------
+//
+// This file is licensed after LGPL v3
+// Look at: https://www.gnu.org/licenses/lgpl-3.0.en.html for details
+//
+//------------------------------------------------------------------------------
+
 #include <iostream>
 #include <stdexcept>
 #include <vector>

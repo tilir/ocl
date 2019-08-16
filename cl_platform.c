@@ -1,10 +1,13 @@
 //-----------------------------------------------------------------------------
 //
-// cl_platform.c
-//
 // Enumerating platforms and devices, OpenCL C way
 //
 //-----------------------------------------------------------------------------
+//
+// This file is licensed after LGPL v3
+// Look at: https://www.gnu.org/licenses/lgpl-3.0.en.html for details
+//
+//------------------------------------------------------------------------------
 
 #include "CL/cl.h"
 #include <assert.h>

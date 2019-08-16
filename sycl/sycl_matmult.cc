@@ -1,6 +1,6 @@
 //------------------------------------------------------------------------------
 //
-// Matrix multiplication with local memory (OpenCL vs serial CPU)
+// Matrix multiplication with simple kernel (SYCL vs serial CPU)
 //
 //------------------------------------------------------------------------------
 //
@@ -9,14 +9,14 @@
 //
 //------------------------------------------------------------------------------
 
+#include <CL/sycl.hpp>
+
 #include <cassert>
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <random>
 #include <sstream>
-
-#include "cl_wrapper2.h"
 
 namespace chrono = std::chrono;
 
@@ -30,41 +30,11 @@ namespace chrono = std::chrono;
 #define MEASURE_NORMAL 1
 #endif
 
-// Tiled and coalesced version
-const char *mmkernel2 = STRINGIFY(__kernel void advanced_multiply(
-    __global int *A, __global int *B, __global int *C, int AX, int AY, int BY) {
-  int k, t;
-  const int row = get_local_id(0);                  // Local row ID (max: TS)
-  const int col = get_local_id(1);                  // Local col ID (max: TS)
-  const int globalRow = TS * get_group_id(0) + row; // Row ID of C (0..M)
-  const int globalCol = TS * get_group_id(1) + col; // Col ID of C (0..N)
+constexpr auto sycl_read = cl::sycl::access::mode::read;
+constexpr auto sycl_write = cl::sycl::access::mode::write;
 
-  __local int Asub[TS][TS];
-  __local int Bsub[TS][TS];
-
-  int acc = 0;
-
-  const int numTiles = AY / TS;
-
-  for (t = 0; t < numTiles; t++) {
-    const int tiledRow = TS * t + row;
-    const int tiledCol = TS * t + col;
-    Asub[col][row] = A[globalRow * AY + tiledCol];
-    Bsub[col][row] = B[tiledRow * BY + globalCol];
-
-    // Synchronise to make sure the tile is loaded
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    for (k = 0; k < TS; k++)
-      acc += Asub[k][row] * Bsub[col][k];
-
-    // Synchronise before loading the next tile
-    barrier(CLK_LOCAL_MEM_FENCE);
-  }
-
-  // Store the final result in C
-  C[globalRow * BY + globalCol] = acc;
-});
+// class is used for kernel name
+class mxm_kernel;
 
 // simplest smoke test
 #if defined(SIMPLEST)
@@ -185,58 +155,60 @@ int main() {
       << std::endl;
 #endif
 
-  oclwrap2::ocl_app_t app;
-  std::cout << "Selected platform: " << app.platform_version() << std::endl;
-  std::cout << "Selected device: " << app.device_name() << std::endl;
+  { // need this additional scope to properly return data from buffers
+    tstart = chrono::high_resolution_clock::now();
+    cl::sycl::gpu_selector gpsel;
+    cl::sycl::queue deviceQueue{gpsel};
 
-  tstart = chrono::high_resolution_clock::now();
+    cl::sycl::range<1> numOfA{BIG_AX * BIG_AY};
+    cl::sycl::range<1> numOfB{BIG_AY * BIG_BY};
+    cl::sycl::range<1> numOfC{BIG_AX * BIG_BY};
 
-  int pidx = app.add_programm(mmkernel2);
-  int kidx = app.extract_kernel(pidx, "advanced_multiply");
+    cl::sycl::buffer<int, 1> bufferA(&a[0][0], numOfA);
+    cl::sycl::buffer<int, 1> bufferB(&b[0][0], numOfA);
+    cl::sycl::buffer<int, 1> bufferC(&c[0][0], numOfC);
 
-  size_t asz = BIG_AX * BIG_AY;
-  size_t bsz = BIG_AY * BIG_BY;
-  size_t csz = BIG_AX * BIG_BY;
+    tfin = chrono::high_resolution_clock::now();
+    std::cout
+        << "SYCL setup time: "
+        << chrono::duration_cast<chrono::milliseconds>(tfin - tstart).count()
+        << std::endl;
 
-  int abuf = app.add_buffer<int>(CL_MEM_READ_ONLY, &a[0][0], asz);
-  int bbuf = app.add_buffer<int>(CL_MEM_READ_ONLY, &b[0][0], bsz);
-  int cbuf = app.add_buffer<int>(CL_MEM_WRITE_ONLY, NULL, csz);
+    tstart = chrono::high_resolution_clock::now();
 
-  app.set_kernel_buf_arg(kidx, 0, abuf);
-  app.set_kernel_buf_arg(kidx, 1, bbuf);
-  app.set_kernel_buf_arg(kidx, 2, cbuf);
+    deviceQueue.submit([&](cl::sycl::handler &cgh) {
+      auto accessorA = bufferA.template get_access<sycl_read>(cgh);
+      auto accessorB = bufferB.template get_access<sycl_read>(cgh);
+      auto accessorC = bufferC.template get_access<sycl_write>(cgh);
 
-  app.set_kernel_int_arg(kidx, 3, BIG_AX);
-  app.set_kernel_int_arg(kidx, 4, BIG_AY);
-  app.set_kernel_int_arg(kidx, 5, BIG_BY);
+      auto kernmul = [=](cl::sycl::nd_item<2> it) {
+        int row = it.get_global_id(0);
+        int col = it.get_global_id(1);
+        int sum = 0;
 
-  size_t globalws[2] = {BIG_AX, BIG_BY};
-  size_t localws[2] = {TS, TS};
-  tfin = chrono::high_resolution_clock::now();
-  std::cout
-      << "Setup time: "
-      << chrono::duration_cast<chrono::milliseconds>(tfin - tstart).count()
-      << std::endl;
+        for (int k = 0; k < BIG_AY; k++)
+          sum += accessorA[row * BIG_AY + k] * accessorB[k * BIG_BY + col];
 
-  // ocl multiplication
-  tstart = chrono::high_resolution_clock::now();
-  app.exec_kernel_nd(kidx, 2, globalws, localws);
-  tfin = chrono::high_resolution_clock::now();
-  std::cout
-      << "OCL calculation time: "
-      << chrono::duration_cast<chrono::milliseconds>(tfin - tstart).count()
-      << std::endl;
+        accessorC[row * BIG_BY + col] = sum;
+      };
 
-  tstart = chrono::high_resolution_clock::now();
-  app.read_buffer<int>(cbuf, &c[0][0], csz);
-  tfin = chrono::high_resolution_clock::now();
-  std::cout
-      << "Teardown time: "
-      << chrono::duration_cast<chrono::milliseconds>(tfin - tstart).count()
-      << std::endl;
+      cgh.parallel_for<mxm_kernel>(
+          cl::sycl::nd_range<2>{cl::sycl::range<2>(BIG_AX, BIG_BY),
+                                cl::sycl::range<2>(TS, TS)},
+          kernmul);
+    });
+
+    deviceQueue.wait();
+    tfin = chrono::high_resolution_clock::now();
+
+    std::cout
+        << "SYCL calculation time: "
+        << chrono::duration_cast<chrono::milliseconds>(tfin - tstart).count()
+        << std::endl;
+  }
 
 #if defined(SIMPLEST)
-  std::cout << "COCL: {" << c[0][0] << ", " << c[1][0] << ", " << c[2][0]
+  std::cout << "CSYCL: {" << c[0][0] << ", " << c[1][0] << ", " << c[2][0]
             << "} " << std::endl;
   std::cout << "CREF: {" << cref[0][0] << ", " << cref[1][0] << ", "
             << cref[2][0] << "} " << std::endl;

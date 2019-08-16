@@ -19,10 +19,12 @@
 #define STRINGIFY(...) #__VA_ARGS__
 
 constexpr size_t LIST_SIZE = 1024;
-using arr_t = std::vector<cl_int>;
+
+using arr_t = std::vector<long>;
 
 // ---------------------------------- OpenCL ---------------------------------
-const char *vakernel = STRINGIFY(__kernel void vector_add(
+const char *vakernel = STRINGIFY(
+__kernel void vector_add(
     __global int *A, __global int *B, __global int *C) {
   int i = get_global_id(0);
   C[i] = A[i] + B[i];

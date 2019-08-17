@@ -32,6 +32,9 @@ namespace chrono = std::chrono;
 
 constexpr auto sycl_read = cl::sycl::access::mode::read;
 constexpr auto sycl_write = cl::sycl::access::mode::write;
+constexpr auto sycl_rw = cl::sycl::access::mode::read_write;
+constexpr auto sycl_local = cl::sycl::access::target::local;
+constexpr auto sycl_local_fence = cl::sycl::access::fence_space::local_space;
 
 // class is used for kernel name
 class mxm_kernel;
@@ -160,16 +163,15 @@ int main() {
     cl::sycl::gpu_selector gpsel;
     cl::sycl::queue deviceQueue{gpsel};
 
-    cl::sycl::range<2> Asz{BIG_AX, BIG_AY};
-    cl::sycl::range<2> Bsz{BIG_AY, BIG_BY};
-    cl::sycl::range<2> Csz{BIG_AX, BIG_BY};
+    cl::sycl::range<2> Locsz{TS, TS};
 
-    cl::sycl::buffer<int, 2> bufferA(&a[0][0], Asz);
-    cl::sycl::buffer<int, 2> bufferB(&b[0][0], Bsz);
-    cl::sycl::buffer<int, 2> bufferC(&c[0][0], Csz);
+    cl::sycl::range<1> numOfA{BIG_AX * BIG_AY};
+    cl::sycl::range<1> numOfB{BIG_AY * BIG_BY};
+    cl::sycl::range<1> numOfC{BIG_AX * BIG_BY};
 
-    bufferA.set_final_data(nullptr);
-    bufferB.set_final_data(nullptr);
+    cl::sycl::buffer<int, 1> bufferA(&a[0][0], numOfA);
+    cl::sycl::buffer<int, 1> bufferB(&b[0][0], numOfB);
+    cl::sycl::buffer<int, 1> bufferC(&c[0][0], numOfC);
 
     tfin = chrono::high_resolution_clock::now();
     std::cout
@@ -184,16 +186,33 @@ int main() {
       auto B = bufferB.template get_access<sycl_read>(cgh);
       auto C = bufferC.template get_access<sycl_write>(cgh);
 
+      // local memory
+      cl::sycl::accessor<int, 2, sycl_rw, sycl_local> Asub(Locsz, cgh);
+      cl::sycl::accessor<int, 2, sycl_rw, sycl_local> Bsub(Locsz, cgh);
+
       auto kernmul = [=](cl::sycl::nd_item<2> it) {
-        int row = it.get_global_id(0);
-        int col = it.get_global_id(1);
+        int row = it.get_local_id(0);
+        int col = it.get_local_id(1);
+        int globalRow = it.get_global_id(0);
+        int globalCol = it.get_global_id(1);
+        int numTiles = BIG_AY / TS;
+        int tiledRow, tiledCol;
 
         int sum = 0;
 
-        for (int k = 0; k < BIG_AY; k++)
-          sum += A[row][k] * B[k][col];
+        for (int t = 0; t < numTiles; t++) {
+          tiledRow = TS * t + row;
+          tiledCol = TS * t + col;
+          Asub[col][row] = A[globalRow * BIG_AY + tiledCol];
+          Bsub[col][row] = B[tiledRow * BIG_BY + globalCol];
+          it.barrier(sycl_local_fence);
 
-        C[row][col] = sum;
+          for (int k = 0; k < TS; k++)
+            sum += Asub[k][row] * Bsub[col][k];
+          it.barrier(sycl_local_fence);
+        }
+
+        C[globalRow * BIG_BY + globalCol] = sum;
       };
 
       cgh.parallel_for<mxm_kernel>(

@@ -69,12 +69,12 @@ void ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
   cl::sycl::buffer<T, 1> bufferC(pc, numOfItems);
 
   deviceQueue.submit([&](cl::sycl::handler &cgh) {
-    auto accessorA = bufferA.template get_access<sycl_read>(cgh);
-    auto accessorB = bufferB.template get_access<sycl_read>(cgh);
-    auto accessorC = bufferC.template get_access<sycl_write>(cgh);
+    auto A = bufferA.template get_access<sycl_read>(cgh);
+    auto B = bufferB.template get_access<sycl_read>(cgh);
+    auto C = bufferC.template get_access<sycl_write>(cgh);
 
-    auto kern = [=](cl::sycl::id<1> wiID) {
-      accessorC[wiID] = accessorA[wiID] + accessorB[wiID];
+    auto kern = [A, B, C](cl::sycl::id<1> wiID) {
+      C[wiID] = A[wiID] + B[wiID];
     };
     cgh.parallel_for<class simple_vector_add<T>>(numOfItems, kern);
   });

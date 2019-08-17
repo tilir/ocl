@@ -172,6 +172,9 @@ int main() {
     cl::sycl::buffer<int, 2> bufferB(&b[0][0], Bsz);
     cl::sycl::buffer<int, 2> bufferC(&c[0][0], Csz);
 
+    bufferA.set_final_data(nullptr);
+    bufferB.set_final_data(nullptr);
+
     tfin = chrono::high_resolution_clock::now();
     std::cout
         << "SYCL setup time: "

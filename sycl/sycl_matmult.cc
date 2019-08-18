@@ -184,9 +184,9 @@ int main() {
       auto B = bufferB.template get_access<sycl_read>(cgh);
       auto C = bufferC.template get_access<sycl_write>(cgh);
 
-      auto kernmul = [=](cl::sycl::nd_item<2> it) {
-        int row = it.get_global_id(0);
-        int col = it.get_global_id(1);
+      auto kernmul = [=](cl::sycl::id<2> work_item) {
+        int row = work_item.get(0);
+        int col = work_item.get(1);
 
         int sum = 0;
 
@@ -196,10 +196,7 @@ int main() {
         C[row][col] = sum;
       };
 
-      cgh.parallel_for<mxm_kernel>(
-          cl::sycl::nd_range<2>{cl::sycl::range<2>(BIG_AX, BIG_BY),
-                                cl::sycl::range<2>(TS, TS)},
-          kernmul);
+      cgh.parallel_for<class mxm_kernel>(cl::sycl::range<2>{BIG_AX, BIG_BY}, kernmul);
     });
 
     deviceQueue.wait();

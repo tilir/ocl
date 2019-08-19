@@ -22,6 +22,8 @@ using arr_t = std::vector<cl::sycl::cl_int>;
 
 // class is used for kernel name
 template <typename T> class simple_vector_add;
+template <typename T> class simple_vector_add1;
+template <typename T> class simple_vector_add2;
 
 class ocl_ctx_t {
   cl::sycl::queue deviceQueue;
@@ -60,9 +62,9 @@ int main() {
 
     std::cout << "Done, checking with host results" << std::endl;
     for (int i = 0; i < LIST_SIZE; ++i)
-      if (C[i] != A[i] + B[i]) {
+      if (C[i] != 2 * (A[i] + B[i])) {
         std::cerr << "At index: " << i << ". ";
-        std::cerr << C[i] << " != " << A[i] + B[i] << "\n";
+        std::cerr << C[i] << " != " << 2 * (A[i] + B[i]) << "\n";
         abort();
       }
 
@@ -79,6 +81,8 @@ void ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
   cl::sycl::buffer<T, 1> bufferA(pa, numOfItems);
   cl::sycl::buffer<T, 1> bufferB(pb, numOfItems);
   cl::sycl::buffer<T, 1> bufferC(pc, numOfItems);
+  cl::sycl::buffer<T, 1> bufferX(numOfItems);
+  cl::sycl::buffer<T, 1> bufferY(numOfItems);
 
   bufferA.set_final_data(nullptr);
   bufferB.set_final_data(nullptr);
@@ -87,11 +91,30 @@ void ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
   deviceQueue.submit([&](cl::sycl::handler &cgh) {
     auto A = bufferA.template get_access<sycl_read>(cgh);
     auto B = bufferB.template get_access<sycl_read>(cgh);
+    auto X = bufferX.template get_access<sycl_write>(cgh);
+
+    cgh.parallel_for<class simple_vector_add<T>>(numOfItems, [=](cl::sycl::id<1> wiID) {
+      X[wiID] = A[wiID] + B[wiID];
+    });
+  });
+
+  deviceQueue.submit([&](cl::sycl::handler &cgh) {
+    auto A = bufferA.template get_access<sycl_read>(cgh);
+    auto B = bufferB.template get_access<sycl_read>(cgh);
+    auto Y = bufferY.template get_access<sycl_write>(cgh);
+
+    cgh.parallel_for<class simple_vector_add1<T>>(numOfItems, [=](cl::sycl::id<1> wiID) {
+      Y[wiID] = A[wiID] + B[wiID];
+    });
+  });
+
+  deviceQueue.submit([&](cl::sycl::handler &cgh) {
+    auto X = bufferX.template get_access<sycl_read>(cgh);
+    auto Y = bufferY.template get_access<sycl_read>(cgh);
     auto C = bufferC.template get_access<sycl_write>(cgh);
 
-    auto kern = [A, B, C](cl::sycl::id<1> wiID) {
-      C[wiID] = A[wiID] + B[wiID];
-    };
-    cgh.parallel_for<class simple_vector_add<T>>(numOfItems, kern);
+    cgh.parallel_for<class simple_vector_add2<T>>(numOfItems, [=](cl::sycl::id<1> wiID) {
+      C[wiID] = X[wiID] + Y[wiID];
+    });
   });
 }

@@ -193,12 +193,12 @@ int main() {
           cl::sycl::range<2>{TS, TS}, [=](cl::sycl::group<2> group) {
             // now local memory is simply allocation here
             int Asub[TS][TS];
-            int Bsub[TS][TS];            
+            int Bsub[TS][TS];
             int numTiles = BIG_AY / TS;
-            int sum = 0;            
+            int sum = 0;
 
             for (int t = 0; t < numTiles; t++) {
-              group.parallel_for_work_item([&](cl::sycl::h_item<2> it) {             
+              group.parallel_for_work_item([&](cl::sycl::h_item<2> it) {
                 int row = it.get_local_id(0);
                 int col = it.get_local_id(1);
                 int globalRow = it.get_global_id(0);
@@ -224,7 +224,7 @@ int main() {
               int globalCol = it.get_global_id(1);
               C[globalRow][globalCol] = sum;
             });
-      });
+          });
     });
 
     deviceQueue.wait();

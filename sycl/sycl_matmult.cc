@@ -196,7 +196,8 @@ int main() {
         C[row][col] = sum;
       };
 
-      cgh.parallel_for<class mxm_kernel>(cl::sycl::range<2>{BIG_AX, BIG_BY}, kernmul);
+      cgh.parallel_for<class mxm_kernel>(cl::sycl::range<2>{BIG_AX, BIG_BY},
+                                         kernmul);
     });
 
     deviceQueue.wait();

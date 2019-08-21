@@ -73,7 +73,7 @@ ocl_rotate(oclwrap2::ocl_app_t &app, int kidx,
   app.set_kernel_float_arg(kidx, 4, theta);
 
   size_t globalws[2] = {static_cast<size_t>(imw), static_cast<size_t>(imh)};
-  size_t localws[2] = {4, 4};
+  size_t localws[2] = {1, 1};
 
   app.exec_kernel_nd(kidx, 2, globalws, localws);
 

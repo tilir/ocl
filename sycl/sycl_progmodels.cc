@@ -114,12 +114,12 @@ int main() {
       // btw try here work_group_size - 1 for silent error
       cgh.parallel_for<class wg_dpc_1d>(
           cl::sycl::nd_range<1>{cl::sycl::range<1>(SIZE),
-                                cl::sycl::range<1>(work_group_size)},
+                                cl::sycl::range<1>(work_group_size - 1)},
           [=](cl::sycl::nd_item<1> work_item) {
             int gid = work_item.get_global_id(0);
             int lid = work_item.get_local_id(0);
             int wid = work_item.get_group(0);
-            if ((gid % 500) == 0)
+            if ((wid % 500) == 16)
               printf("gid: %d, lid: %d, wid: %d\n", gid, lid, wid);
             cl::sycl::atomic_fetch_add(counter_d[0], 1);
           });
@@ -150,8 +150,9 @@ int main() {
             int wid = group.get_id(0);
             group.parallel_for_work_item([&](cl::sycl::h_item<1> item) {
               int gid = item.get_global_id(0);
-              if ((gid % 500) == 0)
-                printf("group id: %d, gid: %d\n", wid, gid);
+              int lid = item.get_local_id(0);
+              if ((wid % 500) == 16)
+                printf("gid: %d, lid: %d, wid: %d\n", gid, lid, wid);
               cl::sycl::atomic_fetch_add(counter_d[0], 1);
             });
           });

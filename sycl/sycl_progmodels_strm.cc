@@ -44,7 +44,7 @@ class simple_dpc_1d;
 class wg_dpc_1d;
 class hier_dpc_1d;
 
-int main() {
+void progmodels() {
   // with GPU selector, stream does not need to be synchronized
 #ifdef USEGPU
   cl::sycl::gpu_selector gpsel;
@@ -168,8 +168,9 @@ int main() {
             int wid = group.get_id(0);
             group.parallel_for_work_item([&](cl::sycl::h_item<1> item) {
               int gid = item.get_global_id(0);
-              if ((gid % 500) == 0)
-                out << "group id: " << wid << " gid: " << gid << cl::sycl::endl;
+              int lid = item.get_local_id(0);
+              if ((wid % 500) == 0)
+                out << "group id: " << wid << " gid: " << gid << " lid: " << lid << cl::sycl::endl;
               cl::sycl::atomic_fetch_add(counter_d[0], 1);
             });
           });
@@ -180,3 +181,13 @@ int main() {
     std::cout << "expected counter: " << SIZE << std::endl;
   }
 }
+
+int main() {
+  try {
+    progmodels();
+  } catch (cl::sycl::exception const &err) {
+    std::cerr << "ERROR: " << err.what() << ":\n";
+    return -1;
+  }
+}
+

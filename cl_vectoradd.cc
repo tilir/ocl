@@ -9,17 +9,28 @@
 //
 //------------------------------------------------------------------------------
 
+// g++ --std=c++2a cl_vectoradd.cc -lOpenCL
+
 #include <iostream>
 #include <stdexcept>
 #include <vector>
 
-#define __CL_ENABLE_EXCEPTIONS
-#include "CL/cl.hpp"
+#define MYVERSION 120
+#include "cl_selector.hpp"
+
+#include "cl_defs.h"
+#include "CL/cl2.hpp"
 
 #define STRINGIFY(...) #__VA_ARGS__
 
 constexpr size_t LIST_SIZE = 1024;
+
+// we can introduce one hard-to catch bug to this code
+#ifndef BUG
 using arr_t = std::vector<cl_int>;
+#else  // BUG
+using arr_t = std::vector<long>;
+#endif // BUG
 
 // ---------------------------------- OpenCL ---------------------------------
 const char *vakernel = STRINGIFY(__kernel void vector_add(
@@ -29,12 +40,13 @@ const char *vakernel = STRINGIFY(__kernel void vector_add(
 });
 // ---------------------------------- OpenCL ---------------------------------
 
-class ocl_ctx_t {
+class ocl_ctx_t : private ocl_selector_t {
   cl::Context context;
   cl::CommandQueue queue;
 
 public:
-  ocl_ctx_t(cl_mem_flags flags) : context(flags), queue(context) {}
+  using ocl_selector_t::devices;
+  ocl_ctx_t() : ocl_selector_t{"Intel"}, context{devices}, queue{context} {}
 
   template <typename T>
   void process_buffers(T const *pa, T const *pb, T *pc, size_t sz);
@@ -44,7 +56,7 @@ int main() {
   arr_t A(LIST_SIZE), B(LIST_SIZE), C(LIST_SIZE);
 
   try {
-    ocl_ctx_t ct(CL_DEVICE_TYPE_GPU);
+    ocl_ctx_t ct;
 
     for (int i = 0; i < LIST_SIZE; i++) {
       A[i] = i;
@@ -79,12 +91,14 @@ void ocl_ctx_t::process_buffers(T const *pa, T const *pb, T *pc, size_t sz) {
   cl::copy(queue, pb, pb + sz, bbuf);
 
   cl::Program program(std::string(vakernel), true);
-  cl::make_kernel<cl::Buffer, cl::Buffer, cl::Buffer> add_vecs(program,
-                                                               "vector_add");
+  cl::KernelFunctor<cl::Buffer, cl::Buffer, cl::Buffer> add_vecs(program,
+                                                                 "vector_add");
+
   cl::NDRange global(sz);
   cl::NDRange local(64);
+  cl::EnqueueArgs encargs{queue, global, local};
 
-  add_vecs(cl::EnqueueArgs(queue, global, local), abuf, bbuf, cbuf);
+  add_vecs(encargs, abuf, bbuf, cbuf);
 
   cl::copy(queue, cbuf, pc, pc + sz);
 }

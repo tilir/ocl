@@ -9,25 +9,38 @@
 //
 //------------------------------------------------------------------------------
 
+// g++ --std=c++2a cl_justbuf.cc -lOpenCL
+
 #include <iostream>
 #include <stdexcept>
 #include <vector>
 
-#define __CL_ENABLE_EXCEPTIONS
-#include "CL/cl.hpp"
+#define MYVERSION 120
+#include "cl_selector.hpp"
 
-class ocl_ctx_t {
+#include "cl_defs.h"
+#include "CL/cl2.hpp"
+
+class ocl_ctx_t : private ocl_selector_t {
   cl::Context context;
   cl::CommandQueue queue;
 
 public:
-  ocl_ctx_t(cl_mem_flags flags) : context(flags), queue(context) {}
+  using ocl_selector_t::devices;
+
+  // try here:
+  //   MYVERSION = 120 and NVIDIA
+  //   MYVERSION = 200 and NVIDIA (error in CreateCommandQueue)
+  //   MYVERSION = 120 and Intel
+  //   MYVERSION = 200 and Intel
+  ocl_ctx_t() : ocl_selector_t{"Intel"}, context{devices}, queue{context} {}
+
   void process_buffers();
 };
 
 int main() {
   try {
-    ocl_ctx_t ct(CL_DEVICE_TYPE_GPU);
+    ocl_ctx_t ct;
     ct.process_buffers();
   } catch (cl::Error err) {
     std::cerr << "ERROR: " << err.what() << ":\n";

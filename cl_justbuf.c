@@ -9,6 +9,10 @@
 //
 //------------------------------------------------------------------------------
 
+#ifndef CL_TARGET_OPENCL_VERSION
+#define CL_TARGET_OPENCL_VERSION 120
+#endif
+
 #include "CL/cl.h"
 #include <assert.h>
 #include <stdio.h>
@@ -35,7 +39,6 @@ int main() {
   struct ocl_ctx_t ct;
 
   // minimalistic setup
-
   ct.ctx = clCreateContextFromType(NULL, CL_DEVICE_TYPE_GPU, &cl_notify_fn,
                                    NULL, &ret);
   CHECK_ERR(ret);
@@ -49,7 +52,12 @@ int main() {
   ret = clGetContextInfo(ct.ctx, CL_CONTEXT_DEVICES, ndevs, devs, NULL);
   CHECK_ERR(ret);
 
+#if CL_TARGET_OPENCL_VERSION < 200
+  ct.que = clCreateCommandQueue(ct.ctx, devs[0], 0, &ret);
+#else
   ct.que = clCreateCommandQueueWithProperties(ct.ctx, devs[0], NULL, &ret);
+#endif
+
   CHECK_ERR(ret);
 
   // do some stuff
@@ -114,6 +122,12 @@ void cl_process_error(cl_int ret, const char *file, int line) {
   switch (ret) {
   case CL_SUCCESS:
     return;
+  case CL_INVALID_CONTEXT:
+    cause = "invalid context";
+    break;
+  case CL_INVALID_PLATFORM:
+    cause = "invalid platform";
+    break;
   case CL_INVALID_VALUE:
     cause = "invalid value";
     break;

@@ -30,6 +30,8 @@ struct ocl_selector_t {
   cl::Platform platform;
   cl::vector<cl::Device> devices;
 
+  ocl_selector_t() = default;
+
   ocl_selector_t(std::string prefix) {
     std::vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);

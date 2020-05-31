@@ -28,12 +28,22 @@ class ocl_ctx_t : private ocl_selector_t {
 public:
   using ocl_selector_t::devices;
 
+#ifdef USESELECTOR
   // try here:
   //   MYVERSION = 120 and NVIDIA
   //   MYVERSION = 200 and NVIDIA (error in CreateCommandQueue)
   //   MYVERSION = 120 and Intel
   //   MYVERSION = 200 and Intel
   ocl_ctx_t() : ocl_selector_t{"Intel"}, context{devices}, queue{context} {}
+#else
+  ocl_ctx_t() : context{CL_DEVICE_TYPE_GPU}, queue{context} {
+    // which devices are in context?
+    std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
+    std::cout << "Devices:" << std::endl;
+    for (auto d : devices)
+      std::cout << "\t* " << d.getInfo<CL_DEVICE_NAME>() << std::endl;
+  }
+#endif
 
   void process_buffers();
 };
@@ -43,7 +53,7 @@ int main() {
     ocl_ctx_t ct;
     ct.process_buffers();
   } catch (cl::Error err) {
-    std::cerr << "ERROR: " << err.what() << ":\n";
+    std::cerr << "ERROR " << err.err() << ":" << err.what() << "\n";
     return -1;
   }
 }

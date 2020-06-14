@@ -4,22 +4,27 @@
 //
 //-----------------------------------------------------------------------------
 
+// clang-format off
+#include "cldefs.h"
+#include "CL/cl2.hpp"
+// clang-format on
+
 struct process_error_t {
-  cl_int ret; 
-  
+  cl_int ret;
+
   process_error_t(cl_int r) : ret(r) {}
-  
-  void operator()(std::ostream& os) {
+
+  void operator()(std::ostream &os) {
     const char *cause = "unknown";
 
     if (ret == CL_SUCCESS) {
       return;
     }
-  #undef PROCESS
-  #define PROCESS(ret, STR)                                                      \
-    else if (ret == STR) {                                                       \
-      cause = #STR;                                                              \
-    }
+#undef PROCESS
+#define PROCESS(ret, STR)                                                      \
+  else if (ret == STR) {                                                       \
+    cause = #STR;                                                              \
+  }
     PROCESS(ret, CL_DEVICE_NOT_FOUND)
     PROCESS(ret, CL_DEVICE_NOT_AVAILABLE)
     PROCESS(ret, CL_COMPILER_NOT_AVAILABLE)
@@ -83,15 +88,15 @@ struct process_error_t {
     PROCESS(ret, CL_INVALID_COMPILER_OPTIONS)
     PROCESS(ret, CL_INVALID_LINKER_OPTIONS)
     PROCESS(ret, CL_INVALID_DEVICE_PARTITION_COUNT)
-  #if (CL_TARGET_OPENCL_VERSION > 120)
+#if (CL_TARGET_OPENCL_VERSION > 120)
     PROCESS(ret, CL_INVALID_PIPE_SIZE)
     PROCESS(ret, CL_INVALID_DEVICE_QUEUE)
-  #endif
-  #undef PROCESS
+#endif
+#undef PROCESS
     else {
       cause = "Unknown";
     }
-    
+
     os << "Error: <" << cause << "> code = " << ret;
   }
 };

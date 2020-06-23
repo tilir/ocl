@@ -3,6 +3,31 @@
 // framecl core: context, device, etc
 //
 //-----------------------------------------------------------------------------
+//
+// task system:
+//   ITask base class defines interface:
+//      execute(command_queue, events)
+//   Every concrete task is ITask subclass:
+//     BufferReadTask
+//     BufferWriteTask
+//     ProgramExecTask
+//     ....
+//   task_t class keeps unique_pointer to ITask and knows how to enqueue:
+//     task_t::enqueue_on(command_queue, events)
+//       calls ITask::execute(command_queue, events)
+//   depgraph_t manages task_t's and events
+//     depgraph_t::execute()
+//       calls context_t::enqueue(task_t, events)
+//   context_t owns queue and delegates to
+//     context_t::enqueue(task_t, events)
+//       calls task_t::enqueue_on(command_queue, events)
+//
+// buffer types:
+//   owning with host buffer and new buffer object
+//   non-owning with host buffer and new buffer object
+//   non-owning with host buffer and pre-existing buffer object (dangerous!)
+//
+//-----------------------------------------------------------------------------
 
 #pragma once
 
@@ -16,8 +41,9 @@
 #include "CL/cl2.hpp"
 // clang-format on
 
-#include "fcutils.hpp"
+#include "fchelper.hpp"
 #include "fcplatform.hpp"
+#include "fcutils.hpp"
 
 namespace framecl {
 
@@ -63,7 +89,7 @@ public:
   }
 
   void enqueue(Task *pt, eventguards_t &evts) const {
-    pt->enqueue_on(ctx_, queues_[active_], evts);
+    pt->enqueue_on(queues_[active_], evts);
   }
 
   operator cl::Context() const { return ctx_; }
@@ -76,8 +102,7 @@ enum class task {
 };
 
 struct ITask {
-  virtual void execute(cl::Context c, cl::CommandQueue q,
-                       eventguards_t &evts) = 0;
+  virtual void execute(cl::CommandQueue q, eventguards_t &evts) = 0;
   virtual ~ITask() {}
 };
 
@@ -90,10 +115,9 @@ public:
   task_t(task type, T &obj, Args &&... args)
       : type_{type}, tsk_{obj.get_task(type, std::forward<Args>(args)...)} {}
 
-  void enqueue_on(cl::Context c, cl::CommandQueue q,
-                  eventguards_t &evts) const {
+  void enqueue_on(cl::CommandQueue q, eventguards_t &evts) const {
     assert(tsk_ && "Non-null task expected");
-    tsk_->execute(c, q, evts);
+    tsk_->execute(q, evts);
   }
 
   void dump(std::ostream &os) const {
@@ -169,36 +193,56 @@ public:
 template <typename T> class buffer_t final {
   context_t &ctx_;
   int size_;
-  std::vector<T> contents_;
+  T *contents_;
   cl::Buffer buf_;
+  bool owning = false;
 
-  // core buffer ctor and interface
+  // core buffer ctors and interface
 public:
   buffer_t(context_t &ctx, int size)
-      : ctx_(ctx), size_(size), contents_(size_),
+      : ctx_(ctx), size_(size), contents_(new T[size_]),
+        buf_(cl::Buffer(ctx, CL_MEM_READ_WRITE, size * sizeof(T))),
+        owning(true) {}
+
+  buffer_t(context_t &ctx, T *contents, int size)
+      : ctx_(ctx), size_(size), contents_(contents),
         buf_(cl::Buffer(ctx, CL_MEM_READ_WRITE, size * sizeof(T))) {}
 
+  buffer_t(context_t &ctx, cl::Buffer b, T *contents, int size)
+      : ctx_(ctx), size_(size), contents_(contents), buf_(b) {}
+
   buffer_t(const buffer_t &) = delete;
+  buffer_t &operator=(const buffer_t &) = delete;
+
+  buffer_t(buffer_t &&rhs)
+      : ctx_(rhs.ctx_), size_(rhs.size_), contents_(rhs.contents_),
+        buf_(rhs.buf_) {
+    rhs.contents_ = nullptr;
+    rhs.buf_ = cl::Buffer();
+  }
+
+  buffer_t &operator=(buffer_t &&) = delete;
+
+  ~buffer_t() {
+    if (owning)
+      delete[] contents_;
+  }
 
   std::unique_ptr<ITask> get_task(task type);
 
   // mimicing vector-like interface
 public:
-  auto begin() { return contents_.begin(); }
-  auto end() { return contents_.end(); }
-  auto begin() const { return contents_.begin(); }
-  auto end() const { return contents_.end(); }
-  auto rbegin() { return contents_.rbegin(); }
-  auto rend() { return contents_.rend(); }
-  auto rbegin() const { return contents_.rbegin(); }
-  auto rend() const { return contents_.rend(); }
+  auto begin() { return randit(&contents_[0]); }
+  auto end() { return randit(&contents_[0] + size_); }
+  auto rbegin() { return randit(&contents_[size_ - 1], -1); }
+  auto rend() { return randit(&contents_[0] - 1, -1); }
 
-  int size() const noexcept { return contents_.size(); }
+  int size() const noexcept { return size_; }
   T &operator[](int n) { return contents_[n]; }
 
   cl::Buffer base() const { return buf_; }
 
-  void dump(std::ostream &os) { os << contents_; }
+  void dump(std::ostream &os) { output(os, contents_, contents_ + size_); }
 };
 
 struct BufferReadTask : public ITask {
@@ -207,10 +251,9 @@ struct BufferReadTask : public ITask {
   cl::Buffer buf_;
 
   BufferReadTask(cl::Buffer buf, int off, int sz, void *ptr)
-      : buf_(buf), off_(off), size_(sz), ptr_(ptr) {}
+      : off_(off), size_(sz), ptr_(ptr), buf_(buf) {}
 
-  void execute(cl::Context c, cl::CommandQueue q,
-               eventguards_t &evts) override {
+  void execute(cl::CommandQueue q, eventguards_t &evts) override {
     q.enqueueReadBuffer(buf_, /* bloking */ false, off_, size_, ptr_, &evts.ins,
                         &evts.out);
   }
@@ -222,10 +265,9 @@ struct BufferWriteTask : public ITask {
   cl::Buffer buf_;
 
   BufferWriteTask(cl::Buffer buf, int off, int sz, void *ptr)
-      : buf_(buf), off_(off), size_(sz), ptr_(ptr) {}
+      : off_(off), size_(sz), ptr_(ptr), buf_(buf) {}
 
-  void execute(cl::Context c, cl::CommandQueue q,
-               eventguards_t &evts) override {
+  void execute(cl::CommandQueue q, eventguards_t &evts) override {
     q.enqueueWriteBuffer(buf_, /* bloking */ false, off_, size_, ptr_,
                          &evts.ins, &evts.out);
   }
@@ -247,8 +289,7 @@ template <typename F, typename... Args> struct ProgramExecTask : public ITask {
     f_ = lam;
   }
 
-  void execute(cl::Context c, cl::CommandQueue q,
-               eventguards_t &evts) override {
+  void execute(cl::CommandQueue q, eventguards_t &evts) override {
     cl::EnqueueArgs eargs(q, evts.ins, rp_.offset, rp_.global, rp_.local);
     evts.out = f_(eargs);
   }
@@ -257,10 +298,10 @@ template <typename F, typename... Args> struct ProgramExecTask : public ITask {
 template <typename T> std::unique_ptr<ITask> buffer_t<T>::get_task(task type) {
   if (type == task::read)
     return std::unique_ptr<ITask>{
-        new BufferReadTask(buf_, 0, size_ * sizeof(T), contents_.data())};
+        new BufferReadTask(buf_, 0, size_ * sizeof(T), &contents_[0])};
   if (type == task::write)
     return std::unique_ptr<ITask>{
-        new BufferWriteTask(buf_, 0, size_ * sizeof(T), contents_.data())};
+        new BufferWriteTask(buf_, 0, size_ * sizeof(T), &contents_[0])};
   throw std::runtime_error("Illegal task for buffer");
 }
 
@@ -326,9 +367,10 @@ public:
         if (level != -1) {
           levels_modified = true;
           task_levels_[pt] = level + 1;
-          assert(level + 1 <= level_tasks_.size() &&
-                 "This invariant shall hold by definition");
-          if (level + 1 == level_tasks_.size())
+          int tsz = level_tasks_.size();
+          assert(tsz >= 0 && "Too many tasks");
+          assert(level + 1 <= tsz && "This invariant shall hold by definition");
+          if (level + 1 == tsz)
             level_tasks_.emplace_back();
           level_tasks_[level + 1].push_back(pt);
         }
@@ -386,7 +428,7 @@ public:
     }
 
     // wait for last active events after all is about to finish
-    for (int i = 0; i < last_active_.size(); ++i)
+    for (size_t i = 0; i < last_active_.size(); ++i)
       if (last_active_[i]) {
         evts_[i].wait();
 #ifdef EVTDBG
@@ -413,4 +455,4 @@ public:
   }
 };
 
-}; // namespace framecl
+} // namespace framecl

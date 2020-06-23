@@ -11,6 +11,8 @@
 #include <iostream>
 #include <vector>
 
+#include "fchelper.hpp"
+
 // clang-format off
 #include "cldefs.h"
 #include "CL/cl2.hpp"
@@ -22,19 +24,6 @@ constexpr int field_version = 26;
 constexpr int field_total = 80;
 
 namespace framecl {
-
-// helper: put vector to ostream
-template <typename T>
-std::ostream &operator<<(std::ostream &os, std::vector<T> v) {
-  os << "[";
-  for (auto it = v.begin(), ite = v.end(); it != ite; ++it) {
-    os << *it;
-    if (std::next(it) != ite)
-      os << " ";
-  }
-  os << "]";
-  return os;
-}
 
 class platform_list_t {
   std::vector<cl::Platform> platforms_;
@@ -137,7 +126,7 @@ public:
   }
 
 private:
-  std::string do_trim(std::string s, int width) {
+  std::string do_trim(std::string s, size_t width) {
     if (s.size() >= width)
       s = s.substr(0, width - 4) + "...";
     return s;

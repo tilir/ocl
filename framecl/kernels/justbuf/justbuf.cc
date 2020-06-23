@@ -40,26 +40,38 @@ int justbufmain(int argc, char **argv) {
   // Context and program
   framecl::context_t ctx(opts);
 
-  // input-output buffer
-  framecl::buffer_t<cl_int> bufA(ctx, size);
-  std::iota(bufA.begin(), bufA.end(), 0);
+  // input and output buffers
+  std::vector<int> vecA(size), vecB(size);
+  std::iota(vecA.begin(), vecA.end(), 0);
+  std::iota(vecB.rbegin(), vecB.rend(), 0);
+
+  // ctor from existing data
+  framecl::buffer_t<cl_int> bufA(ctx, vecA.data(), size);
+
+  // ctor from existing data and existing buffer object
+  framecl::buffer_t<cl_int> bufB(ctx, bufA.base(), vecB.data(), size);
 
   if (opts.verbose()) {
     std::cout << "bufA: ";
     bufA.dump(std::cout);
     std::cout << std::endl;
+    std::cout << "bufB: ";
+    bufB.dump(std::cout);
+    std::cout << std::endl;
   }
-
-  // reference
-  std::vector ref(bufA.begin(), bufA.end());
 
   // tasks
   framecl::task_t writeA(framecl::task::write, bufA);
-  framecl::task_t readA(framecl::task::read, bufA);
+  framecl::task_t readB(framecl::task::read, bufB);
 
-  // dependency graph to execute as a graph (like DPC++ but in framework, not in
-  // language)
-  framecl::depgraph_t dg(ctx, {{&writeA}, {&readA, &writeA}});
+  // clang-format off
+  // dependency graph to execute as a whole
+  // (like DPC++ but in framework, not in language)
+  framecl::depgraph_t dg(ctx, {
+    {&writeA},
+    {&readB, &writeA}
+  });
+  // clang-format on
 
   if (opts.verbose()) {
     std::cout << "Dep graph for tasks:" << std::endl;
@@ -71,9 +83,20 @@ int justbufmain(int argc, char **argv) {
   dg.execute();
 
   if (opts.verbose()) {
-    std::cout << "bufA: ";
-    bufA.dump(std::cout);
+    std::cout << "bufB: ";
+    bufB.dump(std::cout);
     std::cout << std::endl;
+  }
+
+  if (opts.check()) {
+    std::cout << "Cross-check with reference buffer... ";
+    for (decltype(size) i = 0; i < size; ++i)
+      if (bufA[i] != bufB[i]) {
+        std::cout << "failed at i = " << i << ", bufA[i] = " << bufA[i]
+                  << ", bufB[i] = " << bufB[i] << std::endl;
+        throw std::logic_error("Check failed");
+      }
+    std::cout << "ok" << std::endl;
   }
 
   if (!opts.quiet())
@@ -92,4 +115,5 @@ int main(int argc, char **argv) {
   } catch (std::exception &e) {
     std::cerr << "Exception: " << e.what() << std::endl;
   }
+  return -1;
 }

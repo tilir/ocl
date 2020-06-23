@@ -22,9 +22,9 @@ namespace framecl {
 class optparser_t final {
   po::options_description desc_ = "Available options"s;
   po::variables_map vm_;
-  bool quiet_ = false;
   std::string platform_;
   std::string program_;
+  bool quiet_ = false;
   bool parsed_ = false;
 
 public:
@@ -46,6 +46,8 @@ public:
                         "Select file with program");
     desc_.add_options()("quiet", po::bool_switch()->default_value(false),
                         "Suppress almost all messages");
+    desc_.add_options()("check", po::bool_switch()->default_value(false),
+                        "Cross-check results if cross-check is available");
     desc_.add_options()("verbose", po::bool_switch()->default_value(false),
                         "Show additional debug messages");
   }
@@ -136,6 +138,11 @@ public:
     return vm_["verbose"].as<bool>();
   }
 
+  bool check() const noexcept {
+    assert(parsed_ && "Please do not query options before they are parsed");
+    return vm_["check"].as<bool>();
+  }
+
   std::string platform() const {
     assert(parsed_ && "Please do not query options before they are parsed");
     return platform_;
@@ -166,4 +173,4 @@ public:
   bool parsed() const noexcept { return parsed_; }
 };
 
-}; // namespace framecl
+} // namespace framecl

@@ -18,14 +18,14 @@ int vaddmain(int argc, char **argv) {
   framecl::optparser_t opts;
 
   // user may add custom options before parse call
-  opts.add<int>("size", DEFSZ, "data size");
+  opts.add<cl::size_type>("size", DEFSZ, "data size");
 
   // now a ton of useful options registered: device info, platforms, etc
   opts.parse(argc, argv);
 
   // get option value, use custom checker
-  int size = opts.check<int>(
-      "size", [](int sz) { return sz > 0; }, "size shall be > 0");
+  cl::size_type size = opts.check<cl::size_type>(
+      "size", [](cl::size_type sz) { return sz > 0; }, "size shall be > 0");
 
   // hello message
   if (!opts.quiet()) {
@@ -37,13 +37,13 @@ int vaddmain(int argc, char **argv) {
   opts.require_platform("This program requires platform specification. Use "
                         "--list for available platforms");
   opts.require_program("This program needs external cl program file. It shall "
-                       "contain 'vadd' kernel");
+                       "contain 'vector_add' kernel");
 
   // Context and program
   framecl::context_t ctx(opts);
   framecl::program_t prog(ctx, opts);
 
-  cl::NDRange offset(cl::NullRange), global(DEFSZ), local(cl::NullRange);
+  cl::NDRange offset{cl::NullRange}, global{size}, local{cl::NullRange};
 
   framecl::run_params_t parms{offset, global, local};
   framecl::functor_t<cl::Buffer, cl::Buffer, cl::Buffer> vadd(prog, parms,
@@ -73,11 +73,16 @@ int vaddmain(int argc, char **argv) {
                         bufC.base());
   framecl::task_t readC(framecl::task::read, bufC);
 
-  // dependency graph to execute as a graph (like DPC++ but in framework, not in
-  // language)
-  framecl::depgraph_t dg(
-      ctx,
-      {{&writeA}, {&writeB}, {&execF, &writeA, &writeB}, {&readC, &execF}});
+  // clang-format off
+  // dependency graph to execute as a whole
+  // (like DPC++ but in framework, not in language)
+  framecl::depgraph_t dg(ctx, {
+    {&writeA},
+    {&writeB},
+    {&execF, &writeA, &writeB},
+    {&readC, &execF}
+  });
+  // clang-format on
 
   if (opts.verbose()) {
     std::cout << "Dep graph for tasks:" << std::endl;
@@ -92,6 +97,18 @@ int vaddmain(int argc, char **argv) {
     std::cout << "bufC: ";
     bufC.dump(std::cout);
     std::cout << std::endl;
+  }
+
+  if (opts.check()) {
+    std::cout << "Cross-check with non-ocl results... ";
+    for (decltype(size) i = 0; i < size; ++i)
+      if (bufA[i] + bufB[i] != bufC[i]) {
+        std::cout << "failed at i = " << i << ", bufA[i] = " << bufA[i]
+                  << ", bufB[i] = " << bufB[i] << ", bufC[i] = " << bufC[i]
+                  << std::endl;
+        throw std::logic_error("Check failed");
+      }
+    std::cout << "ok" << std::endl;
   }
 
   if (!opts.quiet())
@@ -110,4 +127,5 @@ int main(int argc, char **argv) {
   } catch (std::exception &e) {
     std::cerr << "Exception: " << e.what() << std::endl;
   }
+  return -1;
 }

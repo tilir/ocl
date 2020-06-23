@@ -1,11 +1,13 @@
-set(KERNELS
+set(SUBDIRS
   justbuf
   vadd
   hist
 )
 
-foreach(KERNEL ${KERNELS})
-  add_subdirectory(${KERNEL})
+set(KERNELS)
+
+foreach(SUBDIR ${SUBDIRS})
+  add_subdirectory(${SUBDIR})
 endforeach()
 
 set(KERNELS "${KERNELS}" PARENT_SCOPE)

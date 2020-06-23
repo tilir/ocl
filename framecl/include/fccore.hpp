@@ -323,65 +323,22 @@ class depgraph_t {
   std::unordered_map<task_t *, int> task_levels_;
   std::vector<std::vector<task_t *>> level_tasks_;
 
+  template <typename It> void add_tasks(It start, It fin);
+
 public:
+  // initialize if tasks will be added from some external container
+  // like vector of vectors
+  template <typename It>
+  depgraph_t(context_t &ctx, It start, It fin) : ctx_(ctx) {
+    add_tasks(start, fin);
+  }
+
+  // initialize adding tasks from initializer list to make simple examples
+  // pretty
   depgraph_t(context_t &ctx,
              std::initializer_list<std::initializer_list<task_t *>> init)
       : ctx_(ctx) {
-    // fill tasks, idx and deps
-    level_tasks_.emplace_back();
-    for (auto &&ls : init) {
-      assert(ls.size() > 0 && "Void rows not acceptable");
-      task_t *pt = *ls.begin();
-      tasks_.push_back(pt);
-      idx_[pt] = tasks_.size() - 1;
-
-      // fill level 0 if no deps
-      task_levels_[pt] = (ls.size() == 1) ? 0 : -1;
-      if (ls.size() == 1)
-        level_tasks_[0].push_back(pt);
-      else {
-        // fill deps
-        for (auto &&it = std::next(ls.begin()), ite = ls.end(); it != ite; ++it)
-          deps_[pt].push_back(*it);
-      }
-    }
-    evts_.resize(tasks_.size());
-
-    // fill levels: any pass of this loop will form next level
-    for (;;) {
-      bool all_set = true;
-      bool levels_modified = false;
-      for (auto &&pt : tasks_) {
-        if (task_levels_[pt] != -1)
-          continue;
-        all_set = false;
-        int level = -1;
-        for (auto &&pdep : deps_[pt]) {
-          int dep_lv = task_levels_[pdep];
-          if (dep_lv == -1) {
-            level = -1;
-            break;
-          }
-          level = std::max(level, dep_lv);
-        }
-        if (level != -1) {
-          levels_modified = true;
-          task_levels_[pt] = level + 1;
-          int tsz = level_tasks_.size();
-          assert(tsz >= 0 && "Too many tasks");
-          assert(level + 1 <= tsz && "This invariant shall hold by definition");
-          if (level + 1 == tsz)
-            level_tasks_.emplace_back();
-          level_tasks_[level + 1].push_back(pt);
-        }
-      }
-
-      if (all_set)
-        break;
-
-      if (!levels_modified)
-        throw std::runtime_error("incorrect dep-graph structure detected");
-    }
+    add_tasks(init.begin(), init.end());
   }
 
   void dump(std::ostream &os) const {
@@ -454,5 +411,64 @@ public:
     }
   }
 };
+
+template <typename It> void depgraph_t::add_tasks(It start, It fin) {
+  // fill tasks, idx and deps
+  level_tasks_.emplace_back();
+  for (auto it = start; it != fin; ++it) {
+    auto ls = *it;
+    assert(ls.size() > 0 && "Void rows not acceptable");
+    task_t *pt = *ls.begin();
+    tasks_.push_back(pt);
+    idx_[pt] = tasks_.size() - 1;
+
+    // fill level 0 if no deps
+    task_levels_[pt] = (ls.size() == 1) ? 0 : -1;
+    if (ls.size() == 1)
+      level_tasks_[0].push_back(pt);
+    else {
+      // fill deps
+      for (auto &&it = std::next(ls.begin()), ite = ls.end(); it != ite; ++it)
+        deps_[pt].push_back(*it);
+    }
+  }
+  evts_.resize(tasks_.size());
+
+  // fill levels: any pass of this loop will form next level
+  for (;;) {
+    bool all_set = true;
+    bool levels_modified = false;
+    for (auto &&pt : tasks_) {
+      if (task_levels_[pt] != -1)
+        continue;
+      all_set = false;
+      int level = -1;
+      for (auto &&pdep : deps_[pt]) {
+        int dep_lv = task_levels_[pdep];
+        if (dep_lv == -1) {
+          level = -1;
+          break;
+        }
+        level = std::max(level, dep_lv);
+      }
+      if (level != -1) {
+        levels_modified = true;
+        task_levels_[pt] = level + 1;
+        int tsz = level_tasks_.size();
+        assert(tsz >= 0 && "Too many tasks");
+        assert(level + 1 <= tsz && "This invariant shall hold by definition");
+        if (level + 1 == tsz)
+          level_tasks_.emplace_back();
+        level_tasks_[level + 1].push_back(pt);
+      }
+    }
+
+    if (all_set)
+      break;
+
+    if (!levels_modified)
+      throw std::runtime_error("incorrect dep-graph structure detected");
+  }
+}
 
 } // namespace framecl

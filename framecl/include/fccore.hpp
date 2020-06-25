@@ -32,6 +32,7 @@
 #pragma once
 
 #include <cassert>
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -44,6 +45,8 @@
 #include "fchelper.hpp"
 #include "fcplatform.hpp"
 #include "fcutils.hpp"
+
+namespace chrono = std::chrono;
 
 namespace framecl {
 
@@ -86,6 +89,10 @@ public:
     assert(n >= 0 && n < size() &&
            "can not select device: number incorrect, check size()");
     active_ = n;
+  }
+
+  int max_workgroup_size() const {
+    return devices_[active_].getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>();
   }
 
   void enqueue(Task *pt, eventguards_t &evts) const {
@@ -341,6 +348,8 @@ class depgraph_t {
   std::unordered_map<task_t *, std::vector<task_t *>> deps_;
   std::unordered_map<task_t *, int> task_levels_;
   std::vector<std::vector<task_t *>> level_tasks_;
+  chrono::high_resolution_clock::time_point tstart_, tfin_;
+  bool executed_ = false;
 
   template <typename It> void add_tasks(It start, It fin);
 
@@ -372,47 +381,11 @@ public:
     }
   }
 
-  void execute(bool evtdbg = false) {
-    std::vector<bool> last_active_;
+  void execute(bool evtdbg = false);
 
-    // peek task
-    for (auto &&lv : level_tasks_) {
-      std::vector<bool> active_(evts_.size(), false);
-      for (auto &&pt : lv) {
-        int id = idx_[pt];
-        eventguards_t evt;
-        for (auto &&pdep : deps_[pt]) {
-          int dep_id = idx_[pdep];
-          if (evtdbg) {
-            std::cout << "Dependency event: " << dep_id << "; ";
-            int status =
-                evts_[dep_id].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
-            std::cout << "Status: " << cstat(status) << "\n";
-          }
-          evt.ins.push_back(evts_[dep_id]);
-        }
-        ctx_.enqueue(pt, evt);
-        evts_[id] = evt.out;
-        if (evtdbg) {
-          std::cout << "Produced event: " << id << "; ";
-          int status = evts_[id].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
-          std::cout << "Status: " << cstat(status) << "\n";
-        }
-        active_[id] = true;
-      }
-      last_active_.swap(active_);
-    }
-
-    // wait for last active events after all is about to finish
-    for (size_t i = 0; i < last_active_.size(); ++i)
-      if (last_active_[i]) {
-        evts_[i].wait();
-        if (evtdbg) {
-          std::cout << "Active event: " << i << "; ";
-          int status = evts_[i].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
-          std::cout << "Status: " << cstat(status) << "\n";
-        }
-      }
+  int elapsed() const {
+    assert(executed_ && "You need execute before measuring time");
+    return chrono::duration_cast<chrono::milliseconds>(tfin_ - tstart_).count();
   }
 
   const char *cstat(int status) {
@@ -488,6 +461,54 @@ template <typename It> void depgraph_t::add_tasks(It start, It fin) {
     if (!levels_modified)
       throw std::runtime_error("incorrect dep-graph structure detected");
   }
+}
+
+// time measure will measure nothing if evtdbg is on
+void depgraph_t::execute(bool evtdbg) {
+  std::vector<bool> last_active_;
+  tstart_ = chrono::high_resolution_clock::now();
+
+  // peek task
+  for (auto &&lv : level_tasks_) {
+    std::vector<bool> active_(evts_.size(), false);
+    for (auto &&pt : lv) {
+      int id = idx_[pt];
+      eventguards_t evt;
+      for (auto &&pdep : deps_[pt]) {
+        int dep_id = idx_[pdep];
+        if (evtdbg) {
+          std::cout << "Dependency event: " << dep_id << "; ";
+          int status =
+              evts_[dep_id].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
+          std::cout << "Status: " << cstat(status) << "\n";
+        }
+        evt.ins.push_back(evts_[dep_id]);
+      }
+      ctx_.enqueue(pt, evt);
+      evts_[id] = evt.out;
+      if (evtdbg) {
+        std::cout << "Produced event: " << id << "; ";
+        int status = evts_[id].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
+        std::cout << "Status: " << cstat(status) << "\n";
+      }
+      active_[id] = true;
+    }
+    last_active_.swap(active_);
+  }
+
+  // wait for last active events after all is about to finish
+  for (size_t i = 0; i < last_active_.size(); ++i)
+    if (last_active_[i]) {
+      evts_[i].wait();
+      if (evtdbg) {
+        std::cout << "Active event: " << i << "; ";
+        int status = evts_[i].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
+        std::cout << "Status: " << cstat(status) << "\n";
+      }
+    }
+
+  tfin_ = chrono::high_resolution_clock::now();
+  executed_ = true;
 }
 
 } // namespace framecl

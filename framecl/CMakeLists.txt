@@ -27,16 +27,23 @@ find_package(Boost COMPONENTS
 
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
+option(BUILD_CIMG_KERNELS "Build kernel examples using CImg" ON)
+option(INCLUDE_INTEL_TESTS "Build kernel examples using CImg" ON)
+option(INCLUDE_NVIDIA_TESTS "Build kernel examples using CImg" ON)
+option(INCLUDE_FAILING_TESTS "Build kernel examples using CImg" OFF)
+
 # TODO: will we support Windows build? Not yet, I think...
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-find_package(X11 REQUIRED)
-include_directories(${X11_INCLUDE_DIR})
+if(BUILD_CIMG_KERNELS)
+  find_package(X11 REQUIRED)
+  include_directories(${X11_INCLUDE_DIR})
 
-find_package(JPEG REQUIRED)
-include_directories(${JPEG_INCLUDE_DIR})
+  find_package(JPEG REQUIRED)
+  include_directories(${JPEG_INCLUDE_DIR})
+endif(BUILD_CIMG_KERNELS)
 
 find_package(OpenCL REQUIRED)
 include_directories(${OpenCL_INCLUDE_DIR})
@@ -65,8 +72,10 @@ foreach(KERNEL ${KERNELS})
   target_compile_options(${KERNEL} PUBLIC "-Wall" "-Wextra" "-pedantic" "-Wfatal-errors")
   target_include_directories(${KERNEL} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(${KERNEL} Boost::program_options)
-  target_link_libraries(${KERNEL} ${X11_LIBRARIES})
-  target_link_libraries(${KERNEL} ${JPEG_LIBRARY})
+  if (BUILD_CIMG_KERNELS)
+    target_link_libraries(${KERNEL} ${X11_LIBRARIES})
+    target_link_libraries(${KERNEL} ${JPEG_LIBRARY})
+  endif()
   target_link_libraries(${KERNEL} Threads::Threads)
   target_link_libraries(${KERNEL} ${OpenCL_LIBRARIES})
 endforeach()

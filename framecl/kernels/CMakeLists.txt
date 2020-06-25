@@ -1,6 +1,7 @@
 set(SUBDIRS
   justbuf
   vadd
+  reduce
   hist
   mmult
 )

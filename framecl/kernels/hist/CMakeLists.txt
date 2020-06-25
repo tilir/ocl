@@ -6,18 +6,30 @@ set(NOIM_SRCS
   hist_noimage.cc
 )
 
-add_executable(hist ${HIST_SRCS})
+if(BUILD_CIMG_KERNELS)
+  add_executable(hist ${HIST_SRCS})
+endif(BUILD_CIMG_KERNELS)
+
 add_executable(hist_noimage ${NOIM_SRCS})
 
 add_dependencies(check hist_noimage)
 
-# TODO: Intel's one not working!
-# add_test(NAME "hist"
-#         COMMAND ${CMAKE_CURRENT_BIN_DIR}/hist_noimage --platform Intel --program ${CMAKE_SOURCE_DIR}/kernels/hist/hist.cl --check)
+if(INCLUDE_INTEL_TESTS)
+  if(INCLUDE_FAILING_TESTS)
+    add_test(NAME "hist"
+             COMMAND ${CMAKE_CURRENT_BIN_DIR}/hist_noimage --platform Intel --program ${CMAKE_SOURCE_DIR}/kernels/hist/hist.cl --check)
+  endif(INCLUDE_FAILING_TESTS)
+endif(INCLUDE_INTEL_TESTS)
 
-add_test(NAME "hist_nv"
-         COMMAND ${CMAKE_CURRENT_BIN_DIR}/hist_noimage --platform NVIDIA --program ${CMAKE_SOURCE_DIR}/kernels/hist/hist.cl --check)
+if(INCLUDE_NVIDIA_TESTS)
+  add_test(NAME "hist_nv"
+           COMMAND ${CMAKE_CURRENT_BIN_DIR}/hist_noimage --platform NVIDIA --program ${CMAKE_SOURCE_DIR}/kernels/hist/hist.cl --check)
+endif(INCLUDE_NVIDIA_TESTS)
 
 # register kernels for level up
-set(KERNELS ${KERNELS} hist PARENT_SCOPE)
-set(KERNELS ${KERNELS} hist hist_noimage PARENT_SCOPE)
+set(ADDKERNELS hist_noimage)
+if(BUILD_CIMG_KERNELS)
+  set(ADDKERNELS ${ADDKERNELS} hist)
+endif(BUILD_CIMG_KERNELS)
+
+set(KERNELS ${KERNELS} ${ADDKERNELS} PARENT_SCOPE)

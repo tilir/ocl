@@ -2,6 +2,7 @@ set(SUBDIRS
   justbuf
   vadd
   hist
+  mmult
 )
 
 set(KERNELS)

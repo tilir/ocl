@@ -143,22 +143,15 @@ using context_t = devgroup_t<task_t>;
 
 class program_t final {
   context_t &ctx_;
-  cl::Program p;
+  cl::Program prog_;
+  std::string pline_;
 
-public:
-  program_t(context_t &ctx, optparser_t opts) : ctx_{ctx} {
-    assert(opts.parsed() && "You can not create devgroup before parsing opts");
-    std::ifstream is;
-    is.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-    is.open(opts.program());
-    std::stringstream os;
-    os << is.rdbuf();
-
-    p = cl::Program(ctx, os.str());
+  void build_program() {
+    prog_ = cl::Program(ctx_, pline_);
     try {
-      p.build(); // "-cl-std=CL2.0" ?
+      prog_.build(); // "-cl-std=CL2.0" ?
     } catch (...) {
-      auto buildInfo = p.getBuildInfo<CL_PROGRAM_BUILD_LOG>();
+      auto buildInfo = prog_.getBuildInfo<CL_PROGRAM_BUILD_LOG>();
       std::cerr << "Error: build failed. Log:" << std::endl;
       for (auto &&pair : buildInfo)
         std::cerr << pair.second << std::endl << std::endl;
@@ -166,10 +159,36 @@ public:
     }
   }
 
+  void load_program(std::string name) {
+    std::ifstream is;
+    is.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+    is.open(name);
+    std::stringstream os;
+    os << is.rdbuf();
+    pline_ = os.str();
+  }
+
+public:
+  program_t(context_t &ctx, optparser_t opts) : ctx_{ctx} {
+    assert(opts.parsed() && "You can not create devgroup before parsing opts");
+    load_program(opts.program());
+    build_program();
+  }
+
+  using add_text_functor_t = std::function<void(std::string &)>;
+
+  program_t(context_t &ctx, optparser_t opts, add_text_functor_t fn)
+      : ctx_{ctx} {
+    assert(opts.parsed() && "You can not create devgroup before parsing opts");
+    load_program(opts.program());
+    fn(pline_);
+    build_program();
+  }
+
   // UGLY breach of incapsulation
   context_t &context() { return ctx_; }
 
-  operator cl::Program() const { return p; }
+  operator cl::Program() const { return prog_; }
 };
 
 struct run_params_t {
@@ -353,7 +372,7 @@ public:
     }
   }
 
-  void execute() {
+  void execute(bool evtdbg = false) {
     std::vector<bool> last_active_;
 
     // peek task
@@ -364,21 +383,21 @@ public:
         eventguards_t evt;
         for (auto &&pdep : deps_[pt]) {
           int dep_id = idx_[pdep];
-#ifdef EVTDBG
-          std::cout << "Dependency event: " << dep_id << "; ";
-          int status =
-              evts_[dep_id].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
-          std::cout << "Status: " << cstat(status) << "\n";
-#endif
+          if (evtdbg) {
+            std::cout << "Dependency event: " << dep_id << "; ";
+            int status =
+                evts_[dep_id].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
+            std::cout << "Status: " << cstat(status) << "\n";
+          }
           evt.ins.push_back(evts_[dep_id]);
         }
         ctx_.enqueue(pt, evt);
         evts_[id] = evt.out;
-#ifdef EVTDBG
-        std::cout << "Produced event: " << id << "; ";
-        int status = evts_[id].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
-        std::cout << "Status: " << cstat(status) << "\n";
-#endif
+        if (evtdbg) {
+          std::cout << "Produced event: " << id << "; ";
+          int status = evts_[id].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
+          std::cout << "Status: " << cstat(status) << "\n";
+        }
         active_[id] = true;
       }
       last_active_.swap(active_);
@@ -388,11 +407,11 @@ public:
     for (size_t i = 0; i < last_active_.size(); ++i)
       if (last_active_[i]) {
         evts_[i].wait();
-#ifdef EVTDBG
-        std::cout << "Active event: " << i << "; ";
-        int status = evts_[i].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
-        std::cout << "Status: " << cstat(status) << "\n";
-#endif
+        if (evtdbg) {
+          std::cout << "Active event: " << i << "; ";
+          int status = evts_[i].getInfo<CL_EVENT_COMMAND_EXECUTION_STATUS>();
+          std::cout << "Status: " << cstat(status) << "\n";
+        }
       }
   }
 

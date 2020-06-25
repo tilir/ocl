@@ -9,6 +9,7 @@
 #include <cassert>
 #include <iostream>
 #include <iterator>
+#include <random>
 
 namespace framecl {
 
@@ -29,6 +30,14 @@ std::ostream &output(std::ostream &os, It start, It fin) {
 template <typename T>
 std::ostream &operator<<(std::ostream &os, std::vector<T> v) {
   return output(os, v.begin(), v.end());
+}
+
+// generic random initialization
+template <typename T> void rand_init(T &arr, int sz, int low, int up) {
+  static std::mt19937_64 mt_source;
+  std::uniform_int_distribution<int> dist(low, up);
+  for (int i = 0; i < sz; ++i)
+    arr[i] = dist(mt_source);
 }
 
 // generic random-access iterator
@@ -89,17 +98,17 @@ public:
   difference_type operator-(iterator rhs) { return (pos - rhs.pos) * inc; }
 
 public:
-  reference operator[](size_type n) const { return pos[n]; }
+  reference operator[](size_type n) const { return *(pos + n * inc); }
   reference operator*() { return *pos; }
   pointer operator->() { return pos; }
 
 public:
   bool operator==(randit rhs) { return rhs.pos == pos; }
   bool operator!=(randit rhs) { return rhs.pos != pos; }
-  bool operator>(randit rhs) { return rhs.pos > pos; }
-  bool operator<(randit rhs) { return rhs.pos < pos; }
-  bool operator>=(randit rhs) { return rhs.pos >= pos; }
-  bool operator<=(randit rhs) { return rhs.pos <= pos; }
+  bool operator>(randit rhs) { return (*this - rhs) > 0; }
+  bool operator>=(randit rhs) { return (*this > rhs) || (*this == rhs); }
+  bool operator<(randit rhs) { return !(*this >= rhs); }
+  bool operator<=(randit rhs) { return !(*this > rhs); }
 };
 
 } // namespace framecl

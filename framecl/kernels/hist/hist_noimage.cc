@@ -22,7 +22,7 @@ int histmain(int argc, char **argv) {
   opts.require_platform("This program requires platform specification. Use "
                         "--list for available platforms");
   opts.require_program("This program needs external cl program file. It shall "
-                       "contain 'vadd' kernel");
+                       "contain 'histogram' kernel");
 
   int nbins = opts.check<int>(
       "nbins", [](int nbins) { return nbins > 0; },

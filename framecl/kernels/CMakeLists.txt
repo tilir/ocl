@@ -4,6 +4,7 @@ set(SUBDIRS
   reduce
   hist
   mmult
+  jigsaw
 )
 
 set(KERNELS)

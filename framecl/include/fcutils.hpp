@@ -109,6 +109,11 @@ public:
                 << " rebuild to change" << std::endl;
       std::cout << "Info: run with --help for option list" << std::endl;
     }
+
+    if (quiet() && verbose()) {
+      throw std::logic_error("Passing both quiet and verbose in the same line "
+                             "is bad idea, please peek one");
+    }
   }
 
   template <typename T, typename F>

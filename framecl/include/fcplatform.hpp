@@ -105,12 +105,14 @@ public:
     os << "* Device version: " << d.getInfo<CL_DEVICE_VERSION>() << "\n";
     os << "* Device type: " << d.getInfo<CL_DEVICE_TYPE>() << "\n";
     os << "* Device CU's: " << d.getInfo<CL_DEVICE_MAX_COMPUTE_UNITS>() << "\n";
-    os << "* Device WG size: " << d.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>()
+    os << "* Device global mem size: " << d.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>()
        << "\n";
-    os << "* Device WI dims: "
+    os << "* Device work group size: "
+       << d.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>() << "\n";
+    os << "* Device work item dims: "
        << d.getInfo<CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS>() << "\n";
-    os << "* Device WI sizes: " << d.getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()
-       << "\n";
+    os << "* Device work item sizes: "
+       << d.getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>() << "\n";
   }
 
   void print_detailed(std::ostream &os, std::string device) {

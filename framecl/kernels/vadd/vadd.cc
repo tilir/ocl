@@ -5,6 +5,8 @@
 //-----------------------------------------------------------------------------
 //
 // simple example how to use framecl for vadd
+// sets global size == data size, so really large vectors not supported due to
+// global memory limitations
 //
 //-----------------------------------------------------------------------------
 
@@ -92,6 +94,17 @@ int vaddmain(int argc, char **argv) {
 
   // do execute
   dg.execute();
+
+  if (!opts.quiet()) {
+    std::cout << "Total elapsed time: " << dg.elapsed() << std::endl;
+    std::cout << "Time for writing A: " << dg.task_elapsed(&writeA)
+              << std::endl;
+    std::cout << "Time for writing B: " << dg.task_elapsed(&writeB)
+              << std::endl;
+    std::cout << "Time for executing kernel: " << dg.task_elapsed(&execF)
+              << std::endl;
+    std::cout << "Time for reading C: " << dg.task_elapsed(&readC) << std::endl;
+  }
 
   if (opts.verbose()) {
     std::cout << "bufC: ";

@@ -28,6 +28,11 @@
 //   non-owning with host buffer and pre-existing buffer object (dangerous!)
 //
 //-----------------------------------------------------------------------------
+//
+// Wrapped against official Khronos C++ bindings:
+//   http://github.khronos.org/OpenCL-CLHPP/
+//
+//-----------------------------------------------------------------------------
 
 #pragma once
 
@@ -91,6 +96,10 @@ public:
     active_ = n;
   }
 
+  int global_mem_size() const {
+    return devices_[active_].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();
+  }
+
   int max_workgroup_size() const {
     return devices_[active_].getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>();
   }
@@ -102,11 +111,7 @@ public:
   operator cl::Context() const { return ctx_; }
 };
 
-enum class task {
-  write,
-  process,
-  read,
-};
+enum class task { write, process, read, map, unmap, native };
 
 struct ITask {
   virtual void execute(cl::CommandQueue q, eventguards_t &evts) = 0;
@@ -196,6 +201,21 @@ public:
   context_t &context() { return ctx_; }
 
   operator cl::Program() const { return prog_; }
+};
+
+template <typename F> class native_t final {
+  context_t &ctx_;
+  F closure_;
+
+  static void CL_CALLBACK do_call(void *closure) {
+    auto callable = *reinterpret_cast<F *>(closure);
+    callable();
+  }
+
+public:
+  native_t(F closure) : closure_(closure) {}
+
+  std::unique_ptr<ITask> get_task(task type);
 };
 
 struct run_params_t {
@@ -299,6 +319,47 @@ struct BufferWriteTask : public ITask {
   }
 };
 
+struct BufferMapTask : public ITask {
+  cl::Buffer buf_;
+  cl_map_flags flags_;
+  int off_, size_;
+  void *&ptr_;
+
+  BufferMapTask(cl::Buffer buf, cl_map_flags flags, int off, int sz, void *&ptr)
+      : buf_(buf), flags_(flags), off_(off), size_(sz), ptr_(ptr) {}
+
+  void execute(cl::CommandQueue q, eventguards_t &evts) override {
+    ptr_ = q.enqueueMapBuffer(buf_, /* bloking */ false, flags_, off_, size_,
+                              &evts.ins, &evts.out);
+  }
+};
+
+struct BufferUnMapTask : public ITask {
+  cl::Memory buf_;
+  void *ptr_;
+
+  BufferUnMapTask(cl::Memory buf, void *ptr) : buf_(buf), ptr_(ptr) {}
+
+  void execute(cl::CommandQueue q, eventguards_t &evts) override {
+    q.enqueueUnmapMemObject(buf_, ptr_, &evts.ins, &evts.out);
+  }
+};
+
+struct NativeKernelTask : public ITask {
+  using callback_ft = void(CL_CALLBACK *)(void *);
+
+  callback_ft cb_;
+  std::pair<void *, cl::size_type> args_;
+
+  NativeKernelTask(callback_ft cb, std::pair<void *, cl::size_type> args)
+      : cb_(cb), args_(args) {}
+
+  void execute(cl::CommandQueue q, eventguards_t &evts) override {
+    q.enqueueNativeKernel(cb_, args_, /* mem objs */ nullptr,
+                          /* host objs */ nullptr, &evts.ins, &evts.out);
+  }
+};
+
 template <typename F, typename... Args> struct ProgramExecTask : public ITask {
   run_params_t rp_;
   F func_;
@@ -321,6 +382,13 @@ template <typename F, typename... Args> struct ProgramExecTask : public ITask {
   }
 };
 
+template <typename F> std::unique_ptr<ITask> native_t<F>::get_task(task type) {
+  if (type == task::native) {
+    std::pair<void *, cl::size_type> args{&closure_, sizeof(closure_)};
+    return std::unique_ptr<ITask>{new NativeKernelTask(do_call, args)};
+  }
+}
+
 template <typename T> std::unique_ptr<ITask> buffer_t<T>::get_task(task type) {
   if (type == task::read)
     return std::unique_ptr<ITask>{
@@ -328,6 +396,24 @@ template <typename T> std::unique_ptr<ITask> buffer_t<T>::get_task(task type) {
   if (type == task::write)
     return std::unique_ptr<ITask>{
         new BufferWriteTask(buf_, 0, size_ * sizeof(T), &contents_[0])};
+  if (type == task::map) {
+    void *pcontents = nullptr;
+    assert(contents_ == nullptr &&
+           "Mapped buffer contents must be null before mapping");
+    auto task = std::unique_ptr<ITask>{new BufferMapTask(
+        buf_, CL_MAP_READ | CL_MAP_WRITE, 0, size_ * sizeof(T), pcontents)};
+    contents_ = reinterpret_cast<T *>(pcontents);
+    return task;
+  }
+
+  if (type == task::unmap) {
+    assert(contents_ != nullptr &&
+           "Unmapped buffer contents must be not null before unmapping");
+    void *pcontents = contents_;
+    return std::unique_ptr<ITask>{new BufferUnMapTask(buf_, pcontents)};
+    contents_ = nullptr;
+  }
+
   throw std::runtime_error("Illegal task for buffer");
 }
 
@@ -344,6 +430,7 @@ class depgraph_t {
   context_t &ctx_;
   std::vector<task_t *> tasks_;
   std::vector<cl::Event> evts_;
+  std::vector<cl_ulong> evt_times_;
   std::unordered_map<task_t *, int> idx_;
   std::unordered_map<task_t *, std::vector<task_t *>> deps_;
   std::unordered_map<task_t *, int> task_levels_;
@@ -383,9 +470,17 @@ public:
 
   void execute(bool evtdbg = false);
 
-  int elapsed() const {
+  unsigned long elapsed() const {
     assert(executed_ && "You need execute before measuring time");
     return chrono::duration_cast<chrono::milliseconds>(tfin_ - tstart_).count();
+  }
+
+  cl_ulong task_elapsed(task_t *pt) {
+    assert(executed_ && "You need execute before measuring time");
+    auto idit = idx_.find(pt);
+    assert(idx_.end() != idit && "You querying non-existent tasks");
+    int idx = idit->second;
+    return evt_times_[idx];
   }
 
   const char *cstat(int status) {
@@ -425,6 +520,7 @@ template <typename It> void depgraph_t::add_tasks(It start, It fin) {
     }
   }
   evts_.resize(tasks_.size());
+  evt_times_.resize(tasks_.size());
 
   // fill levels: any pass of this loop will form next level
   for (;;) {
@@ -508,6 +604,15 @@ void depgraph_t::execute(bool evtdbg) {
     }
 
   tfin_ = chrono::high_resolution_clock::now();
+
+  // get profiling information for all events
+  for (int idx = 0, idf = evts_.size(); idx < idf; ++idx) {
+    auto &event = evts_[idx];
+    cl_ulong time_start = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+    cl_ulong time_end = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+    evt_times_[idx] = time_end - time_start;
+  }
+
   executed_ = true;
 }
 

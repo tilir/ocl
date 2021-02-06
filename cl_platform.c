@@ -59,7 +59,7 @@ struct platforms_t get_platforms() {
   return p;
 }
 
-enum { STRING_BUFSIZE = 1024 };
+enum { STRING_BUFSIZE = 4096 };
 
 void print_platform_info(cl_platform_id pid) {
   cl_int ret;

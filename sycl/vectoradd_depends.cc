@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 //
-// Vector addition, SYCL way, with explicit buffers
-// no explicit sync required
+// Vector addition, SYCL way, with malloc_device
+// We may set depends explicitly, so no explicit wait here, except last
 //
 //------------------------------------------------------------------------------
 //
@@ -63,34 +63,41 @@ int main() {
 template <typename T>
 void process_buffers(T const *pa, T const *pb, T *pc, size_t sz,
                      cl::sycl::queue &deviceQueue) {
+  int *A = cl::sycl::malloc_device<T>(sz, deviceQueue);
+  int *B = cl::sycl::malloc_device<T>(sz, deviceQueue);
+  int *C = cl::sycl::malloc_device<T>(sz, deviceQueue);
+
+  // kernels to copy to device
+  auto eA = deviceQueue.submit(
+      [&](cl::sycl::handler &cgh) { cgh.memcpy(A, pa, sz * sizeof(T)); });
+
+  auto eB = deviceQueue.submit(
+      [&](cl::sycl::handler &cgh) { cgh.memcpy(B, pb, sz * sizeof(T)); });
+
+  // vector addition
   cl::sycl::range<1> numOfItems{sz};
-  cl::sycl::buffer<T, 1> bufferA(pa, numOfItems);
-  cl::sycl::buffer<T, 1> bufferB(pb, numOfItems);
-  cl::sycl::buffer<T, 1> bufferC(pc, numOfItems);
-
-  bufferA.set_final_data(nullptr);
-  bufferB.set_final_data(nullptr);
-
-  deviceQueue.submit([&](cl::sycl::handler &cgh) {
-    auto A = bufferA.template get_access<sycl_read>(cgh);
-    auto B = bufferB.template get_access<sycl_read>(cgh);
-    auto C = bufferC.template get_access<sycl_write>(cgh);
-
+  auto eC = deviceQueue.submit([&](cl::sycl::handler &cgh) {
+    cgh.depends_on({eA, eB});
     auto kern = [A, B, C](cl::sycl::id<1> wiID) {
       C[wiID] = A[wiID] + B[wiID];
     };
     cgh.parallel_for<class simple_vector_add<T>>(numOfItems, kern);
   });
 
-  auto A = bufferA.template get_access<sycl_read>();
-  auto B = bufferB.template get_access<sycl_read>();
-  auto C = bufferC.template get_access<sycl_read>();
+  // copy back
+  deviceQueue.submit([&](cl::sycl::handler &cgh) {
+    cgh.depends_on(eC);
+    cgh.memcpy(pc, C, sz * sizeof(T));
+  });
+
+  // last wait inevitable
+  deviceQueue.wait();
 
   std::cout << "Checking with host results" << std::endl;
   for (int i = 0; i < LIST_SIZE; ++i)
-    if (C[i] != A[i] + B[i]) {
+    if (pc[i] != pa[i] + pb[i]) {
       std::cerr << "At index: " << i << ". ";
-      std::cerr << C[i] << " != " << A[i] + B[i] << "\n";
+      std::cerr << pc[i] << " != " << pa[i] + pb[i] << "\n";
       abort();
     }
 }

@@ -180,10 +180,11 @@ void test() {
     bufferB.set_final_data(nullptr);
 
     tfin = chrono::high_resolution_clock::now();
-    std::cout
-        << "SYCL setup time: "
-        << chrono::duration_cast<chrono::milliseconds>(tfin - tstart + t2 - t1).count()
-        << std::endl;
+    std::cout << "SYCL setup time: "
+              << chrono::duration_cast<chrono::milliseconds>(tfin - tstart +
+                                                             t2 - t1)
+                     .count()
+              << std::endl;
 
     tstart = chrono::high_resolution_clock::now();
 

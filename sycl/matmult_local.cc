@@ -200,8 +200,7 @@ void test() {
       cl::sycl::accessor<int, 2, sycl_rw, sycl_local> Bsub(Locsz, cgh);
 
       cgh.parallel_for<class mxm_kernel_local>(
-          cl::sycl::nd_range<2>(Globsz, Locsz),
-          [=](cl::sycl::nd_item<2> it) {
+          cl::sycl::nd_range<2>(Globsz, Locsz), [=](cl::sycl::nd_item<2> it) {
             int row = it.get_local_id(0);
             int col = it.get_local_id(1);
             int globalRow = TS * it.get_group(0) + row;

@@ -93,7 +93,7 @@ void progmodels() {
       // data parallel kernel with single 1d range parameter
       cgh.parallel_for<class simple_dpc_1d>(
           cl::sycl::range<1>{SIZE}, [=](cl::sycl::id<1> work_item) {
-            int wid = work_item[0];            
+            int wid = work_item[0];
 
             // we can not use stdout, because accessing non-const global
             // variable is not allowed within SYCL device code
@@ -126,9 +126,9 @@ void progmodels() {
       //
       // btw try here work_group_size - 1 for silent error
       auto wgs = work_group_size;
-      #ifdef WGSERR
-        wgs -= 1;
-      #endif
+#ifdef WGSERR
+      wgs -= 1;
+#endif
       cgh.parallel_for<class wg_dpc_1d>(
           cl::sycl::nd_range<1>{cl::sycl::range<1>(SIZE),
                                 cl::sycl::range<1>(wgs)},
@@ -137,7 +137,8 @@ void progmodels() {
             int lid = work_item.get_local_id(0);
             int wid = work_item.get_group(0);
             if ((gid % 500) == 0)
-              out << "gid: " << gid << ", lid: " << lid << ", wid: " << wid << cl::sycl::endl;
+              out << "gid: " << gid << ", lid: " << lid << ", wid: " << wid
+                  << cl::sycl::endl;
             cl::sycl::atomic_fetch_add(counter_d[0], 1);
           });
     });
@@ -170,7 +171,8 @@ void progmodels() {
               int gid = item.get_global_id(0);
               int lid = item.get_local_id(0);
               if ((wid % 500) == 0)
-                out << "group id: " << wid << " gid: " << gid << " lid: " << lid << cl::sycl::endl;
+                out << "group id: " << wid << " gid: " << gid << " lid: " << lid
+                    << cl::sycl::endl;
               cl::sycl::atomic_fetch_add(counter_d[0], 1);
             });
           });
@@ -190,4 +192,3 @@ int main() {
     return -1;
   }
 }
-

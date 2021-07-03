@@ -25,7 +25,7 @@ template <typename T> class simple_vector_add;
 template <typename T> class simple_vector_add1;
 template <typename T> class simple_vector_add2;
 
-void print_info(std::ostream &os, const cl::sycl::queue& deviceQueue) {
+void print_info(std::ostream &os, const cl::sycl::queue &deviceQueue) {
   auto device = deviceQueue.get_device();
   os << device.get_info<cl::sycl::info::device::name>() << "\n";
   os << "Driver version: "
@@ -34,7 +34,8 @@ void print_info(std::ostream &os, const cl::sycl::queue& deviceQueue) {
 }
 
 template <typename T>
-void process_buffers(T const *pa, T const *pb, T *pc, size_t sz, cl::sycl::queue& deviceQueue);
+void process_buffers(T const *pa, T const *pb, T *pc, size_t sz,
+                     cl::sycl::queue &deviceQueue);
 
 int main() {
   arr_t A(LIST_SIZE), B(LIST_SIZE), C(LIST_SIZE);
@@ -61,7 +62,8 @@ int main() {
 }
 
 template <typename T>
-void process_buffers(T const *pa, T const *pb, T *pc, size_t sz, cl::sycl::queue& deviceQueue) {
+void process_buffers(T const *pa, T const *pb, T *pc, size_t sz,
+                     cl::sycl::queue &deviceQueue) {
   cl::sycl::range<1> numOfItems{sz};
   cl::sycl::buffer<T, 1> bufferA(pa, numOfItems);
   cl::sycl::buffer<T, 1> bufferB(pb, numOfItems);

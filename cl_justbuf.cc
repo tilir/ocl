@@ -19,7 +19,7 @@
 #include "cl_selector.hpp"
 
 #include "cl_defs.h"
-#include "CL/cl2.hpp"
+#include "CL/opencl.hpp"
 
 class ocl_ctx_t : private ocl_selector_t {
   cl::Context context;

@@ -19,7 +19,7 @@
 #include "cl_selector.hpp"
 
 #include "cl_defs.h"
-#include "CL/cl2.hpp"
+#include "CL/opencl.hpp"
 
 #define STRINGIFY(...) #__VA_ARGS__
 

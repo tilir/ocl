@@ -15,7 +15,7 @@
 
 // clang-format off
 #include "cldefs.h"
-#include "CL/cl2.hpp"
+#include "CL/opencl.hpp"
 // clang-format on
 
 constexpr int field_name = 30;

@@ -23,7 +23,7 @@
 #endif
 
 #include "cl_defs.h"
-#include "CL/cl2.hpp"
+#include "CL/opencl.hpp"
 
 // intended to be private base only => no virtual dtor
 struct ocl_selector_t {

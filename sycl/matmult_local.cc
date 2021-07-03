@@ -37,7 +37,7 @@ constexpr auto sycl_local = cl::sycl::access::target::local;
 constexpr auto sycl_local_fence = cl::sycl::access::fence_space::local_space;
 
 // class is used for kernel name
-class mxm_kernel;
+class mxm_kernel_local;
 
 // simplest smoke test
 #if defined(SIMPLEST)
@@ -124,12 +124,15 @@ void matrix_rand_init(int *arr, int sz) {
     arr[i] = dist(mt_source);
 }
 
-int main() {
-  smoketest();
-  std::cout << "Welcome to matrix multiplication" << std::endl;
-  std::cout << "[ " << BIG_AX << " x " << BIG_AY << " ] * [ " << BIG_AY << " x "
-            << BIG_BY << " ]" << std::endl;
+void print_info(cl::sycl::queue &q, std::ostream &os) {
+  auto device = q.get_device();
+  os << device.get_info<cl::sycl::info::device::name>() << "\n";
+  os << "Driver version: "
+     << device.get_info<cl::sycl::info::device::driver_version>() << "\n";
+  os << device.get_info<cl::sycl::info::device::opencl_c_version>() << "\n";
+}
 
+void test() {
 #if !defined(SIMPLEST)
   int(*a)[BIG_AY] = new int[BIG_AX][BIG_AY];
   int(*b)[BIG_BY] = new int[BIG_AY][BIG_BY];
@@ -158,13 +161,17 @@ int main() {
       << std::endl;
 #endif
 
+  cl::sycl::gpu_selector gpsel;
+  cl::sycl::queue deviceQueue{gpsel};
+
+  print_info(deviceQueue, std::cout);
+
   { // need this additional scope to properly return data from buffers
     tstart = chrono::high_resolution_clock::now();
-    cl::sycl::gpu_selector gpsel;
-    cl::sycl::queue deviceQueue{gpsel};
 
     cl::sycl::range<2> Asz{BIG_AX, BIG_AY};
     cl::sycl::range<2> Bsz{BIG_AY, BIG_BY};
+    cl::sycl::range<2> Globsz{BIG_AX, BIG_BY};
     cl::sycl::range<2> Csz{BIG_AX, BIG_BY};
     cl::sycl::range<2> Locsz{TS, TS};
 
@@ -192,37 +199,38 @@ int main() {
       cl::sycl::accessor<int, 2, sycl_rw, sycl_local> Asub(Locsz, cgh);
       cl::sycl::accessor<int, 2, sycl_rw, sycl_local> Bsub(Locsz, cgh);
 
-      auto kernmul = [=](cl::sycl::nd_item<2> it) {
-        int row = it.get_local_id(0);
-        int col = it.get_local_id(1);
-        int globalRow = it.get_global_id(0);
-        int globalCol = it.get_global_id(1);
-        int numTiles = BIG_AY / TS;
+      cgh.parallel_for<class mxm_kernel_local>(
+          cl::sycl::nd_range<2>(Globsz, Locsz),
+          [=](cl::sycl::nd_item<2> it) {
+            int row = it.get_local_id(0);
+            int col = it.get_local_id(1);
+            int globalRow = TS * it.get_group(0) + row;
+            int globalCol = TS * it.get_group(1) + col;
+            int numTiles = BIG_AY / TS;
 
-        int sum = 0;
+            int sum = 0;
 
-        for (int t = 0; t < numTiles; t++) {
-          int tiledRow = TS * t + row;
-          int tiledCol = TS * t + col;
-          Asub[col][row] = A[globalRow][tiledCol];
-          Bsub[col][row] = B[tiledRow][globalCol];
-          it.barrier(sycl_local_fence);
+            for (int t = 0; t < numTiles; t++) {
+              int tiledRow = TS * t + row;
+              int tiledCol = TS * t + col;
+              Asub[row][col] = A[globalRow][tiledCol];
+              Bsub[row][col] = B[tiledRow][globalCol];
+#ifndef NOBARRIER
+              it.barrier(sycl_local_fence);
+#endif
 
-          for (int k = 0; k < TS; k++)
-            sum += Asub[k][row] * Bsub[col][k];
-          it.barrier(sycl_local_fence);
-        }
-
-        C[globalRow][globalCol] = sum;
-      };
-
-      cgh.parallel_for<mxm_kernel>(
-          cl::sycl::nd_range<2>{cl::sycl::range<2>(BIG_AX, BIG_BY),
-                                cl::sycl::range<2>(TS, TS)},
-          kernmul);
+              for (int k = 0; k < TS; k++)
+                sum += Asub[row][k] * Bsub[k][col];
+#ifndef NOBARRIER
+              it.barrier(sycl_local_fence);
+#endif
+            }
+            C[globalRow][globalCol] = sum;
+          });
     });
 
-    deviceQueue.wait();
+    deviceQueue.wait_and_throw();
+
     tfin = chrono::high_resolution_clock::now();
 
     std::cout
@@ -255,4 +263,20 @@ int main() {
   delete[] c;
   delete[] cref;
 #endif
+}
+
+int main() {
+  smoketest();
+  std::cout << "Welcome to matrix multiplication" << std::endl;
+  std::cout << "[ " << BIG_AX << " x " << BIG_AY << " ] * [ " << BIG_AY << " x "
+            << BIG_BY << " ]" << std::endl;
+  std::cout << "Tile size is: " << TS << std::endl;
+
+  try {
+    test();
+  } catch (cl::sycl::exception const &err) {
+    std::cerr << "ERROR: " << err.what() << ":\n";
+    return -1;
+  }
+  std::cout << "DONE, BYE\n";
 }

@@ -121,12 +121,15 @@ void matrix_rand_init(int *arr, int sz) {
     arr[i] = dist(mt_source);
 }
 
-int main() {
-  smoketest();
-  std::cout << "Welcome to matrix multiplication" << std::endl;
-  std::cout << "[ " << BIG_AX << " x " << BIG_AY << " ] * [ " << BIG_AY << " x "
-            << BIG_BY << " ]" << std::endl;
+void print_info(cl::sycl::queue &q, std::ostream &os) {
+  auto device = q.get_device();
+  os << device.get_info<cl::sycl::info::device::name>() << "\n";
+  os << "Driver version: "
+     << device.get_info<cl::sycl::info::device::driver_version>() << "\n";
+  os << device.get_info<cl::sycl::info::device::opencl_c_version>() << "\n";
+}
 
+void test() {
 #if !defined(SIMPLEST)
   int(*a)[BIG_AY] = new int[BIG_AX][BIG_AY];
   int(*b)[BIG_BY] = new int[BIG_AY][BIG_BY];
@@ -143,7 +146,7 @@ int main() {
   int cref[BIG_AX][BIG_BY];
 #endif
 
-  chrono::high_resolution_clock::time_point tstart, tfin;
+  chrono::high_resolution_clock::time_point tstart, tfin, t1, t2;
 
 #if MEASURE_NORMAL
   tstart = chrono::high_resolution_clock::now();
@@ -155,10 +158,15 @@ int main() {
       << std::endl;
 #endif
 
+  t1 = chrono::high_resolution_clock::now();
+  cl::sycl::gpu_selector gpsel;
+  cl::sycl::queue deviceQueue{gpsel};
+  t2 = chrono::high_resolution_clock::now();
+
+  print_info(deviceQueue, std::cout);
+
   { // need this additional scope to properly return data from buffers
     tstart = chrono::high_resolution_clock::now();
-    cl::sycl::gpu_selector gpsel;
-    cl::sycl::queue deviceQueue{gpsel};
 
     cl::sycl::range<2> Asz{BIG_AX, BIG_AY};
     cl::sycl::range<2> Bsz{BIG_AY, BIG_BY};
@@ -174,7 +182,7 @@ int main() {
     tfin = chrono::high_resolution_clock::now();
     std::cout
         << "SYCL setup time: "
-        << chrono::duration_cast<chrono::milliseconds>(tfin - tstart).count()
+        << chrono::duration_cast<chrono::milliseconds>(tfin - tstart + t2 - t1).count()
         << std::endl;
 
     tstart = chrono::high_resolution_clock::now();
@@ -184,16 +192,19 @@ int main() {
       auto B = bufferB.template get_access<sycl_read>(cgh);
       auto C = bufferC.template get_access<sycl_write>(cgh);
 
-      auto kernmul = [=](cl::sycl::id<2> work_item) {
+      auto kernmul = [A, B, C](cl::sycl::id<2> work_item) {
         int row = work_item.get(0);
         int col = work_item.get(1);
 
+#ifdef INEFF
+        for (int k = 0; k < BIG_AY; k++)
+          C[row][col] += A[row][k] * B[k][col];
+#else
         int sum = 0;
-
         for (int k = 0; k < BIG_AY; k++)
           sum += A[row][k] * B[k][col];
-
         C[row][col] = sum;
+#endif
       };
 
       cgh.parallel_for<class mxm_kernel>(cl::sycl::range<2>{BIG_AX, BIG_BY},
@@ -233,4 +244,18 @@ int main() {
   delete[] c;
   delete[] cref;
 #endif
+}
+
+int main() {
+  smoketest();
+  std::cout << "Welcome to matrix multiplication" << std::endl;
+  std::cout << "[ " << BIG_AX << " x " << BIG_AY << " ] * [ " << BIG_AY << " x "
+            << BIG_BY << " ]" << std::endl;
+  try {
+    test();
+  } catch (cl::sycl::exception const &err) {
+    std::cerr << "ERROR: " << err.what() << ":\n";
+    return -1;
+  }
+  std::cout << "DONE, BYE\n";
 }

@@ -159,8 +159,15 @@ void test() {
 #endif
 
   t1 = chrono::high_resolution_clock::now();
+
+#ifdef RUNCPU
+  cl::sycl::cpu_selector cpsel;
+  cl::sycl::queue deviceQueue{cpsel};
+#else
   cl::sycl::gpu_selector gpsel;
   cl::sycl::queue deviceQueue{gpsel};
+#endif
+
   t2 = chrono::high_resolution_clock::now();
 
   print_info(deviceQueue, std::cout);

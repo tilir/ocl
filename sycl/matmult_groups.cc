@@ -160,8 +160,13 @@ int main() {
 
   { // need this additional scope to properly return data from buffers
     tstart = chrono::high_resolution_clock::now();
+#ifdef RUNCPU
+    cl::sycl::cpu_selector cpsel;
+    cl::sycl::queue deviceQueue{cpsel};
+#else
     cl::sycl::gpu_selector gpsel;
     cl::sycl::queue deviceQueue{gpsel};
+#endif
     auto device = deviceQueue.get_device();
 
     cl::sycl::range<2> Asz{BIG_AX, BIG_AY};
@@ -199,29 +204,29 @@ int main() {
 
             for (int t = 0; t < numTiles; t++) {
               group.parallel_for_work_item([&](cl::sycl::h_item<2> it) {
-                int row = it.get_local_id(0);
-                int col = it.get_local_id(1);
-                int globalRow = it.get_global_id(0);
-                int globalCol = it.get_global_id(1);
+                int row = it.get_local_id()[0];
+                int col = it.get_local_id()[1];
+                int globalRow = it.get_global_id()[0];
+                int globalCol = it.get_global_id()[1];
 
                 int tiledRow = TS * t + row;
                 int tiledCol = TS * t + col;
-                Asub[col][row] = A[globalRow][tiledCol];
-                Bsub[col][row] = B[tiledRow][globalCol];
+                Asub[row][col] = A[globalRow][tiledCol];
+                Bsub[row][col] = B[tiledRow][globalCol];
               });
 
               group.parallel_for_work_item([&](cl::sycl::h_item<2> it) {
-                int row = it.get_local_id(0);
-                int col = it.get_local_id(1);
+                int row = it.get_local_id()[0];
+                int col = it.get_local_id()[1];
 
                 for (int k = 0; k < TS; k++)
-                  sum += Asub[k][row] * Bsub[col][k];
+                  sum += Asub[row][k] * Bsub[k][col];
               });
             }
 
             group.parallel_for_work_item([&](cl::sycl::h_item<2> it) {
-              int globalRow = it.get_global_id(0);
-              int globalCol = it.get_global_id(1);
+              int globalRow = it.get_global_id()[0];
+              int globalCol = it.get_global_id()[0];
               C[globalRow][globalCol] = sum;
             });
           });

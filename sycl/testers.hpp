@@ -36,6 +36,7 @@ constexpr int NREPS = 10;
 class Timer {
   chrono::high_resolution_clock::time_point start_, fin_;
   bool started_ = false;
+
 public:
   Timer() = default;
   void start() {
@@ -56,20 +57,19 @@ public:
   }
 };
 
-template <typename T>
-class VectorAdd {
+template <typename T> class VectorAdd {
   cl::sycl::queue DeviceQueue_;
+
 public:
   using type = T;
   VectorAdd(cl::sycl::queue &DeviceQueue) : DeviceQueue_(DeviceQueue) {}
   virtual void operator()(T const *AVec, T const *BVec, T *CVec, size_t Sz) = 0;
   cl::sycl::queue &Queue() { return DeviceQueue_; }
   const cl::sycl::queue &Queue() const { return DeviceQueue_; }
-  virtual ~VectorAdd() {}  
+  virtual ~VectorAdd() {}
 };
 
-template <typename T>
-class VectorAddHost : public VectorAdd<T> {
+template <typename T> class VectorAddHost : public VectorAdd<T> {
 public:
   VectorAddHost(cl::sycl::queue &DeviceQueue) : VectorAdd<T>(DeviceQueue) {}
   void operator()(T const *AVec, T const *BVec, T *CVec, size_t Sz) override {
@@ -77,27 +77,31 @@ public:
       CVec[I] = AVec[I] + BVec[I];
   }
 };
- 
-template <typename T>
-class VectorAddTester {
+
+template <typename T> class VectorAddTester {
   std::vector<T> A_, B_, C_;
   VectorAdd<T> &Vadder_;
   Timer Timer_;
   unsigned Sz_;
   unsigned Rep_;
+
 public:
-  VectorAddTester(VectorAdd<T> &Vadder, unsigned Sz = LIST_SIZE, unsigned Rep = NREPS) : Vadder_(Vadder), Sz_(Sz), Rep_(Rep) {
+  VectorAddTester(VectorAdd<T> &Vadder, unsigned Sz = LIST_SIZE,
+                  unsigned Rep = NREPS)
+      : Vadder_(Vadder), Sz_(Sz), Rep_(Rep) {
     A_.resize(Sz_);
     B_.resize(Sz_);
     C_.resize(Sz_);
   }
-  
+
   void print_info(std::ostream &os) const {
     auto device = Vadder_.Queue().get_device();
     os << device.template get_info<cl::sycl::info::device::name>() << "\n";
     os << "Driver version: "
-       << device.template get_info<cl::sycl::info::device::driver_version>() << "\n";
-    os << device.template get_info<cl::sycl::info::device::opencl_c_version>() << "\n";
+       << device.template get_info<cl::sycl::info::device::driver_version>()
+       << "\n";
+    os << device.template get_info<cl::sycl::info::device::opencl_c_version>()
+       << "\n";
   }
 
   void initialize() {
@@ -126,8 +130,7 @@ public:
   }
 };
 
-template <typename VaddChildT>
-void test_sequence(int argc, char **argv) {
+template <typename VaddChildT> void test_sequence(int argc, char **argv) {
   std::cout << "Welcome to vector addition" << std::endl;
 
   try {
@@ -166,5 +169,4 @@ void test_sequence(int argc, char **argv) {
   std::cout << "Everything is correct" << std::endl;
 }
 
-}
-
+} // namespace sycltesters

@@ -57,13 +57,16 @@ public:
   }
 };
 
+using EvtRet_t = std::optional<std::vector<cl::sycl::event>>;
+
 template <typename T> class VectorAdd {
   cl::sycl::queue DeviceQueue_;
 
 public:
   using type = T;
   VectorAdd(cl::sycl::queue &DeviceQueue) : DeviceQueue_(DeviceQueue) {}
-  virtual void operator()(T const *AVec, T const *BVec, T *CVec, size_t Sz) = 0;
+  virtual EvtRet_t operator()(T const *AVec, T const *BVec, T *CVec,
+                              size_t Sz) = 0;
   cl::sycl::queue &Queue() { return DeviceQueue_; }
   const cl::sycl::queue &Queue() const { return DeviceQueue_; }
   virtual ~VectorAdd() {}
@@ -72,9 +75,11 @@ public:
 template <typename T> class VectorAddHost : public VectorAdd<T> {
 public:
   VectorAddHost(cl::sycl::queue &DeviceQueue) : VectorAdd<T>(DeviceQueue) {}
-  void operator()(T const *AVec, T const *BVec, T *CVec, size_t Sz) override {
+  EvtRet_t operator()(T const *AVec, T const *BVec, T *CVec,
+                      size_t Sz) override {
     for (size_t I = 0; I < Sz; ++I)
       CVec[I] = AVec[I] + BVec[I];
+    return {}; // nothing to construct as event
   }
 };
 
@@ -112,21 +117,41 @@ public:
     }
   }
 
+  unsigned getTime(EvtRet_t Opt) {
+    auto AccTime = 0;
+    if (!Opt.has_value())
+      return AccTime;
+    auto &&Evts = Opt.value();
+    for (auto &&Evt : Evts) {
+      auto Start =
+          Evt.get_profiling_info<sycl::info::event_profiling::command_start>();
+      auto End =
+          Evt.get_profiling_info<sycl::info::event_profiling::command_end>();
+      AccTime += End - Start;
+    }
+    return AccTime;
+  }
+
   // to have perf measurements we are doing in loop:
   // C = A + B;
   // A = B + C;
   // B = C + A;
-  unsigned calculate() {
+  std::pair<unsigned, unsigned> calculate() {
     // timer start
+    unsigned EvtTiming = 0;
     Timer_.start();
     // loop
     for (int i = 0; i < Rep_; ++i) {
-      Vadder_(A_.data(), B_.data(), C_.data(), LIST_SIZE);
-      Vadder_(B_.data(), C_.data(), A_.data(), LIST_SIZE);
-      Vadder_(C_.data(), A_.data(), B_.data(), LIST_SIZE);
+      EvtRet_t Ret;
+      Ret = Vadder_(A_.data(), B_.data(), C_.data(), Sz_);
+      EvtTiming += getTime(Ret);
+      Ret = Vadder_(B_.data(), C_.data(), A_.data(), Sz_);
+      EvtTiming += getTime(Ret);
+      Ret = Vadder_(C_.data(), A_.data(), B_.data(), Sz_);
+      EvtTiming += getTime(Ret);
     }
     Timer_.stop();
-    return Timer_.elapsed();
+    return {Timer_.elapsed(), EvtTiming};
   }
 };
 
@@ -134,20 +159,29 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
   std::cout << "Welcome to vector addition" << std::endl;
 
   try {
+#ifdef INORD
+    cl::sycl::property_list PropList{
+        sycl::property::queue::in_order(),
+        cl::sycl::property::queue::enable_profiling()};
+#else
+    cl::sycl::property_list PropList{
+        cl::sycl::property::queue::enable_profiling()};
+#endif
+
 #ifdef RUNCPU
     cl::sycl::cpu_selector CPsel;
-    cl::sycl::queue Q{CPsel};
+    cl::sycl::queue Q{CPsel, PropList};
 #else
     cl::sycl::gpu_selector GPsel;
-    cl::sycl::queue Q{GPsel};
+    cl::sycl::queue Q{GPsel, PropList};
 #endif
 
 #ifdef MEASURE_NORMAL
     VectorAddHost<int> VaddH{Q}; // Q unused for this derived class
     VectorAddTester<int> TesterH{VaddH};
     TesterH.initialize();
-    unsigned ElapsedH = TesterH.calculate();
-    std::cout << "Measured host time: " << ElapsedH << std::endl;
+    auto ElapsedH = TesterH.calculate();
+    std::cout << "Measured host time: " << ElapsedH.first << std::endl;
 #endif
 
     VaddChildT Vadd{Q};
@@ -161,7 +195,9 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
     std::cout << "Calculating" << std::endl;
     auto Elapsed = Tester.calculate();
 
-    std::cout << "Measured time: " << Elapsed << std::endl;
+    std::cout << "Measured time: " << Elapsed.first / 1000.0 << std::endl;
+    std::cout << "Pure execution time: " << Elapsed.second / 1000000000.0
+              << std::endl;
   } catch (cl::sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << ":\n";
     abort();

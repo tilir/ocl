@@ -15,90 +15,72 @@
 #include <iostream>
 #include <vector>
 
-constexpr auto sycl_read = cl::sycl::access::mode::read;
-constexpr auto sycl_write = cl::sycl::access::mode::write;
-
-constexpr int LIST_SIZE = 1024 * 1024 * 2;
-using arr_t = std::vector<cl::sycl::cl_int>;
+#define INORD // to get inorder queue
+#include "testers.hpp"
 
 // class is used for kernel name
-template <typename T> class simple_vector_add;
+template <typename T> class vector_add_inord;
 
-void print_info(std::ostream &os, const cl::sycl::queue &deviceQueue) {
-  auto device = deviceQueue.get_device();
-  os << device.get_info<cl::sycl::info::device::name>() << "\n";
-  os << "Driver version: "
-     << device.get_info<cl::sycl::info::device::driver_version>() << "\n";
-  os << device.get_info<cl::sycl::info::device::opencl_c_version>() << "\n";
-}
+template <typename T> class VectorAddInord : public sycltesters::VectorAdd<T> {
+  using sycltesters::VectorAdd<T>::Queue;
 
-template <typename T>
-void process_buffers(T const *pa, T const *pb, T *pc, size_t sz,
-                     cl::sycl::queue &deviceQueue);
+public:
+  VectorAddInord(cl::sycl::queue &DeviceQueue)
+      : sycltesters::VectorAdd<T>(DeviceQueue) {}
 
-int main() {
-  arr_t A(LIST_SIZE), B(LIST_SIZE), C(LIST_SIZE);
-  std::cout << "Welcome to vector addition" << std::endl;
+  sycltesters::EvtRet_t operator()(T const *AVec, T const *BVec, T *CVec,
+                                   size_t Sz) override {
+    std::vector<cl::sycl::event> ProfInfo;
+    auto &DeviceQueue = Queue();
 
-  try {
-    cl::sycl::gpu_selector GPsel;
-    cl::sycl::queue Q{GPsel, cl::sycl::property::queue::in_order()};
-    print_info(std::cout, Q);
+    int *A = cl::sycl::malloc_device<T>(Sz, DeviceQueue);
+    int *B = cl::sycl::malloc_device<T>(Sz, DeviceQueue);
+    int *C = cl::sycl::malloc_device<T>(Sz, DeviceQueue);
 
-    std::cout << "Initializing" << std::endl;
-    for (int i = 0; i < LIST_SIZE; i++) {
-      A[i] = i;
-      B[i] = LIST_SIZE - i;
-    }
-
-    std::cout << "Calculating" << std::endl;
-    process_buffers(A.data(), B.data(), C.data(), LIST_SIZE, Q);
-  } catch (cl::sycl::exception const &err) {
-    std::cerr << "ERROR: " << err.what() << ":\n";
-    return -1;
-  }
-  std::cout << "Everything is correct" << std::endl;
-}
-
-template <typename T>
-void process_buffers(T const *pa, T const *pb, T *pc, size_t sz,
-                     cl::sycl::queue &deviceQueue) {
-  int *A = cl::sycl::malloc_device<T>(sz, deviceQueue);
-  int *B = cl::sycl::malloc_device<T>(sz, deviceQueue);
-  int *C = cl::sycl::malloc_device<T>(sz, deviceQueue);
-
-  if (!deviceQueue.is_in_order()) {
-    std::cerr << "ERROR: expected inorder queue\n";
-    abort();
-  }
-
-  // kernels to copy to device
-  deviceQueue.submit(
-      [&](cl::sycl::handler &cgh) { cgh.memcpy(A, pa, sz * sizeof(T)); });
-  deviceQueue.submit(
-      [&](cl::sycl::handler &cgh) { cgh.memcpy(B, pb, sz * sizeof(T)); });
-
-  // vector addition
-  cl::sycl::range<1> numOfItems{sz};
-  deviceQueue.submit([&](cl::sycl::handler &cgh) {
-    auto kern = [A, B, C](cl::sycl::id<1> wiID) {
-      C[wiID] = A[wiID] + B[wiID];
-    };
-    cgh.parallel_for<class simple_vector_add<T>>(numOfItems, kern);
-  });
-
-  // copy back
-  deviceQueue.submit(
-      [&](cl::sycl::handler &cgh) { cgh.memcpy(pc, C, sz * sizeof(T)); });
-
-  // last wait is required
-  deviceQueue.wait();
-
-  std::cout << "Checking with host results" << std::endl;
-  for (int i = 0; i < LIST_SIZE; ++i)
-    if (pc[i] != pa[i] + pb[i]) {
-      std::cerr << "At index: " << i << ". ";
-      std::cerr << pc[i] << " != " << pa[i] + pb[i] << "\n";
+    if (!DeviceQueue.is_in_order()) {
+      std::cerr << "ERROR: expected inorder queue\n";
       abort();
     }
+
+    // kernels to copy to device
+    auto EvtA = DeviceQueue.submit(
+        [&](cl::sycl::handler &cgh) { cgh.memcpy(A, AVec, Sz * sizeof(T)); });
+    ProfInfo.push_back(EvtA);
+    auto EvtB = DeviceQueue.submit(
+        [&](cl::sycl::handler &cgh) { cgh.memcpy(B, BVec, Sz * sizeof(T)); });
+    ProfInfo.push_back(EvtB);
+
+    // vector addition
+    cl::sycl::range<1> numOfItems{Sz};
+    auto EvtC = DeviceQueue.submit([&](cl::sycl::handler &cgh) {
+      auto kern = [A, B, C](cl::sycl::id<1> wiID) {
+        C[wiID] = A[wiID] + B[wiID];
+      };
+      cgh.parallel_for<class vector_add_inord<T>>(numOfItems, kern);
+    });
+    ProfInfo.push_back(EvtC);
+
+    // copy back
+    auto EvtD = DeviceQueue.submit(
+        [&](cl::sycl::handler &cgh) { cgh.memcpy(CVec, C, Sz * sizeof(T)); });
+    ProfInfo.push_back(EvtD);
+
+    // last wait is required
+    DeviceQueue.wait();
+
+    // host-side test that one vadd iteration is correct
+#ifdef VERIFY
+    for (int i = 0; i < Sz; ++i)
+      if (CVec[i] != AVec[i] + BVec[i]) {
+        std::cerr << "At index: " << i << ". ";
+        std::cerr << CVec[i] << " != " << AVec[i] + BVec[i] << "\n";
+        abort();
+      }
+#endif
+    return ProfInfo;
+  }
+};
+
+int main(int argc, char **argv) {
+  sycltesters::test_sequence<VectorAddInord<int>>(argc, argv);
 }

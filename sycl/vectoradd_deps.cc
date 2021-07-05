@@ -1,6 +1,7 @@
 //------------------------------------------------------------------------------
 //
 // Vector addition, SYCL way
+// This standalone program (not in testers.hpp) shows more complex dep graph
 //
 //------------------------------------------------------------------------------
 //

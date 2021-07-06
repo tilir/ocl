@@ -20,11 +20,11 @@
 // class is used for kernel name
 template <typename T> class vector_add_device;
 
-template <typename T> class VectorAddBuf : public sycltesters::VectorAdd<T> {
+template <typename T> class VectorAddDevice : public sycltesters::VectorAdd<T> {
   using sycltesters::VectorAdd<T>::Queue;
 
 public:
-  VectorAddBuf(cl::sycl::queue &DeviceQueue)
+  VectorAddDevice(cl::sycl::queue &DeviceQueue)
       : sycltesters::VectorAdd<T>(DeviceQueue) {}
 
   sycltesters::EvtRet_t operator()(T const *AVec, T const *BVec, T *CVec,
@@ -36,30 +36,31 @@ public:
     int *C = cl::sycl::malloc_device<T>(Sz, DeviceQueue);
 
     // kernels to copy to device
-    auto eA = DeviceQueue.submit(
+    auto EvtA = DeviceQueue.submit(
         [&](cl::sycl::handler &cgh) { cgh.memcpy(A, AVec, Sz * sizeof(T)); });
-    ProfInfo.push_back(eA);
+    ProfInfo.push_back(EvtA);
 
-    auto eB = DeviceQueue.submit(
+    auto EvtB = DeviceQueue.submit(
         [&](cl::sycl::handler &cgh) { cgh.memcpy(B, BVec, Sz * sizeof(T)); });
-    ProfInfo.push_back(eB);
+    ProfInfo.push_back(EvtB);
 
     // vector addition
     cl::sycl::range<1> numOfItems{Sz};
-    auto eC = DeviceQueue.submit([&](cl::sycl::handler &cgh) {
-      cgh.depends_on({eA, eB});
+    auto EvtC = DeviceQueue.submit([&](cl::sycl::handler &cgh) {
+      cgh.depends_on({EvtA, EvtB});
       auto kern = [A, B, C](cl::sycl::id<1> wiID) {
         C[wiID] = A[wiID] + B[wiID];
       };
       cgh.parallel_for<class vector_add_device<T>>(numOfItems, kern);
     });
-    ProfInfo.push_back(eC);
+    ProfInfo.push_back(EvtC);
 
     // copy back
-    DeviceQueue.submit([&](cl::sycl::handler &cgh) {
-      cgh.depends_on(eC);
+    auto EvtD = DeviceQueue.submit([&](cl::sycl::handler &cgh) {
+      cgh.depends_on(EvtC);
       cgh.memcpy(CVec, C, Sz * sizeof(T));
     });
+    ProfInfo.push_back(EvtD);
 
     // last wait inevitable
     DeviceQueue.wait();
@@ -78,5 +79,5 @@ public:
 };
 
 int main(int argc, char **argv) {
-  sycltesters::test_sequence<VectorAddBuf<int>>(argc, argv);
+  sycltesters::test_sequence<VectorAddDevice<int>>(argc, argv);
 }

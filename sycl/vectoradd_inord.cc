@@ -77,6 +77,9 @@ public:
         abort();
       }
 #endif
+    cl::sycl::free(A, DeviceQueue);
+    cl::sycl::free(B, DeviceQueue);
+    cl::sycl::free(C, DeviceQueue);
     return ProfInfo;
   }
 };

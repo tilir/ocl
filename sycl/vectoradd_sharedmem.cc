@@ -1,8 +1,7 @@
 //------------------------------------------------------------------------------
 //
 // Vector addition, SYCL way, with malloc_device
-// Explicit wait on queue is basic synchronization mechanism
-// Try -DNOWAIT to trigger strange bugs
+// We may set depends explicitly, so no explicit wait here, except last
 //
 //------------------------------------------------------------------------------
 //
@@ -32,48 +31,31 @@ public:
                                    size_t Sz) override {
     std::vector<cl::sycl::event> ProfInfo;
     auto &DeviceQueue = Queue();
-    int *A = cl::sycl::malloc_device<T>(Sz, DeviceQueue);
-    int *B = cl::sycl::malloc_device<T>(Sz, DeviceQueue);
-    int *C = cl::sycl::malloc_device<T>(Sz, DeviceQueue);
 
-    // kernels to copy to device
-    auto EvtA = DeviceQueue.submit(
-        [&](cl::sycl::handler &cgh) { cgh.memcpy(A, AVec, Sz * sizeof(T)); });
-    ProfInfo.push_back(EvtA);
-    auto EvtB = DeviceQueue.submit(
-        [&](cl::sycl::handler &cgh) { cgh.memcpy(B, BVec, Sz * sizeof(T)); });
-    ProfInfo.push_back(EvtB);
-#ifndef NOWAIT
-    DeviceQueue.wait();
+#ifdef HOST_ALLOC
+    int *A = cl::sycl::malloc_host<T>(Sz, DeviceQueue);
+    int *B = cl::sycl::malloc_host<T>(Sz, DeviceQueue);
+    int *C = cl::sycl::malloc_host<T>(Sz, DeviceQueue);
+#else
+    int *A = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
+    int *B = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
+    int *C = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
 #endif
+
+    std::copy(AVec, AVec + Sz, A);
+    std::copy(BVec, BVec + Sz, B);
 
     // vector addition
     cl::sycl::range<1> numOfItems{Sz};
-    auto EvtC = DeviceQueue.submit([&](cl::sycl::handler &cgh) {
-      auto kern = [A, B, C](cl::sycl::id<1> wiID) {
-        C[wiID] = A[wiID] + B[wiID];
-      };
-      cgh.parallel_for<class vector_add_device<T>>(numOfItems, kern);
-    });
-    ProfInfo.push_back(EvtC);
-#ifndef NOWAIT
+
+    // requires -fsycl-unnamed-lambda option to be added 
+    auto Evt = DeviceQueue.parallel_for(numOfItems, [=](auto n) { C[n] = A[n] + B[n]; });
+    ProfInfo.push_back(Evt);
+    
+    // last wait inevitable
     DeviceQueue.wait();
-#endif
 
-    // copy back
-    auto EvtD = DeviceQueue.submit(
-        [&](cl::sycl::handler &cgh) { cgh.memcpy(CVec, C, Sz * sizeof(T)); });
-    ProfInfo.push_back(EvtD);
-#ifndef NOWAIT
-    DeviceQueue.wait();
-#endif
-
-    // trying to access device memory on host
-#ifdef TRYACC
-    std::cout << C[0] << std::endl;
-#endif
-
-    // host-side test that one vadd iteration is correct
+// host-side test that one vadd iteration is correct
 #ifdef VERIFY
     for (int i = 0; i < Sz; ++i)
       if (CVec[i] != AVec[i] + BVec[i]) {

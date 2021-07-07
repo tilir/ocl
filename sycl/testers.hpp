@@ -4,7 +4,8 @@
 // Avoiding tons of boilerplate otherwise
 //
 // Macros to control things:
-//  -DRUNCPU         : run on CPU
+//  -DRUNHOST        : run as a host code (debugging, etc)
+//  -DINORD          : use inorder queues
 //  -DMEASURE_NORMAL : measure with normal host code
 //
 //------------------------------------------------------------------------------
@@ -20,6 +21,8 @@
 #include <chrono>
 #include <iostream>
 #include <vector>
+
+#include "optparse.hpp"
 
 // convenient sycl mode synonyms
 constexpr auto sycl_read = cl::sycl::access::mode::read;
@@ -91,8 +94,8 @@ template <typename T> class VectorAddTester {
   unsigned Rep_;
 
 public:
-  VectorAddTester(VectorAdd<T> &Vadder, unsigned Sz = LIST_SIZE,
-                  unsigned Rep = NREPS)
+  VectorAddTester(VectorAdd<T> &Vadder, unsigned Sz,
+                  unsigned Rep)
       : Vadder_(Vadder), Sz_(Sz), Rep_(Rep) {
     A_.resize(Sz_);
     B_.resize(Sz_);
@@ -139,6 +142,7 @@ public:
   std::pair<unsigned, unsigned> calculate() {
     // timer start
     unsigned EvtTiming = 0;
+    std::cout << "Nreps = " << Rep_ << std::endl;
     Timer_.start();
     // loop
     for (int i = 0; i < Rep_; ++i) {
@@ -159,6 +163,23 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
   std::cout << "Welcome to vector addition" << std::endl;
 
   try {
+    optparser_t OptParser;
+    OptParser.parse(argc, argv);
+
+    unsigned Size = OptParser.template get<int>("size");
+    unsigned NReps = OptParser.template get<int>("nreps");
+
+    if (Size == 0) Size = LIST_SIZE;
+    if (NReps == 0) NReps = NREPS;
+
+    std::cout << "Using vector size = " << Size << std::endl;
+    std::cout << "Using #of repetitions = " << NReps << std::endl;
+
+    auto Exception_handler = [](sycl::exception_list e_list) {
+      for (std::exception_ptr const &e : e_list)
+        std::rethrow_exception(e);
+    };
+
 #ifdef INORD
     cl::sycl::property_list PropList{
         sycl::property::queue::in_order(),
@@ -168,24 +189,24 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
         cl::sycl::property::queue::enable_profiling()};
 #endif
 
-#ifdef RUNCPU
-    cl::sycl::cpu_selector CPsel;
-    cl::sycl::queue Q{CPsel, PropList};
+#ifdef RUNHOST
+    cl::sycl::host_selector Hsel;
+    cl::sycl::queue Q{Hsel, Exception_handler, PropList};
 #else
     cl::sycl::gpu_selector GPsel;
-    cl::sycl::queue Q{GPsel, PropList};
+    cl::sycl::queue Q{GPsel, Exception_handler, PropList};
 #endif
 
 #ifdef MEASURE_NORMAL
     VectorAddHost<int> VaddH{Q}; // Q unused for this derived class
-    VectorAddTester<int> TesterH{VaddH};
+    VectorAddTester<int> TesterH{VaddH, Size, NReps};
     TesterH.initialize();
     auto ElapsedH = TesterH.calculate();
     std::cout << "Measured host time: " << ElapsedH.first << std::endl;
 #endif
 
     VaddChildT Vadd{Q};
-    VectorAddTester<typename VaddChildT::type> Tester{Vadd};
+    VectorAddTester<typename VaddChildT::type> Tester{Vadd, Size, NReps};
 
     Tester.print_info(std::cout);
 

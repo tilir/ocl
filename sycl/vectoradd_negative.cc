@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 //
-// Vector addition, SYCL way, with malloc_shared
-// No need to dependencies, everything is managed automatically with single wait
+// Vector addition, SYCL way, with malloc_device
+// We may set depends explicitly, so no explicit wait here, except last
 //
 //------------------------------------------------------------------------------
 //
@@ -45,12 +45,17 @@ public:
     std::copy(AVec, AVec + Sz, A);
     std::copy(BVec, BVec + Sz, B);
 
+    int *ABack = A + Sz;
+    int *BBack = B + Sz;
+    int *CBack = C + Sz;
+
     // vector addition
     cl::sycl::range<1> numOfItems{Sz};
 
     // requires -fsycl-unnamed-lambda option to be added
-    auto Evt = DeviceQueue.parallel_for(numOfItems,
-                                        [=](auto n) { C[n] = A[n] + B[n]; });
+    auto Evt = DeviceQueue.parallel_for(numOfItems, [=](auto n) {
+      CBack[-n - 1] = ABack[-n - 1] + BBack[-n - 1];
+    });
     ProfInfo.push_back(Evt);
 
     // last wait inevitable
@@ -65,12 +70,9 @@ public:
         abort();
       }
 #endif
-
-#ifndef FORGET_FREE
     cl::sycl::free(A, DeviceQueue);
     cl::sycl::free(B, DeviceQueue);
     cl::sycl::free(C, DeviceQueue);
-#endif
     return ProfInfo;
   }
 };

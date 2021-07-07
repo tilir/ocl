@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 //
-// Vector addition, SYCL way, with malloc_shared
-// No need to dependencies, everything is managed automatically with single wait
+// Vector addition, SYCL way, with malloc_device
+// We may set depends explicitly, so no explicit wait here, except last
 //
 //------------------------------------------------------------------------------
 //
@@ -42,6 +42,10 @@ public:
     int *C = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
 #endif
 
+    // this multiplier is intended to break stateless-to-statefull
+    int *Mult = cl::sycl::malloc_shared<int>(1, DeviceQueue);
+    *Mult = 1;
+
     std::copy(AVec, AVec + Sz, A);
     std::copy(BVec, BVec + Sz, B);
 
@@ -49,8 +53,8 @@ public:
     cl::sycl::range<1> numOfItems{Sz};
 
     // requires -fsycl-unnamed-lambda option to be added
-    auto Evt = DeviceQueue.parallel_for(numOfItems,
-                                        [=](auto n) { C[n] = A[n] + B[n]; });
+    auto Evt = DeviceQueue.parallel_for(
+        numOfItems, [=](auto n) { C[*Mult * n] = A[n] + B[n]; });
     ProfInfo.push_back(Evt);
 
     // last wait inevitable
@@ -65,12 +69,9 @@ public:
         abort();
       }
 #endif
-
-#ifndef FORGET_FREE
     cl::sycl::free(A, DeviceQueue);
     cl::sycl::free(B, DeviceQueue);
     cl::sycl::free(C, DeviceQueue);
-#endif
     return ProfInfo;
   }
 };

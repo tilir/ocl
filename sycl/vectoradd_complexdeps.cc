@@ -17,8 +17,6 @@
 
 #include "testers.hpp"
 
-auto host_ptr = cl::sycl::property::buffer::use_host_ptr{};
-
 // classes used for kernel names
 template <typename T> class vector_add;
 template <typename T> class vector_add_scaled23;

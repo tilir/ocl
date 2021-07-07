@@ -31,9 +31,9 @@ public:
                                    size_t Sz) override {
     std::vector<cl::sycl::event> ProfInfo;
     cl::sycl::range<1> NumOfItems{Sz};
-    cl::sycl::buffer<T, 1> bufferA(AVec, NumOfItems);
-    cl::sycl::buffer<T, 1> bufferB(BVec, NumOfItems);
-    cl::sycl::buffer<T, 1> bufferC(CVec, NumOfItems);
+    cl::sycl::buffer<T, 1> bufferA(AVec, NumOfItems, {host_ptr});
+    cl::sycl::buffer<T, 1> bufferB(BVec, NumOfItems, {host_ptr});
+    cl::sycl::buffer<T, 1> bufferC(CVec, NumOfItems, {host_ptr});
 
     bufferA.set_final_data(nullptr);
     bufferB.set_final_data(nullptr);

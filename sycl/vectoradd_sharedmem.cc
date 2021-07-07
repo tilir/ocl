@@ -48,10 +48,11 @@ public:
     // vector addition
     cl::sycl::range<1> numOfItems{Sz};
 
-    // requires -fsycl-unnamed-lambda option to be added 
-    auto Evt = DeviceQueue.parallel_for(numOfItems, [=](auto n) { C[n] = A[n] + B[n]; });
+    // requires -fsycl-unnamed-lambda option to be added
+    auto Evt = DeviceQueue.parallel_for(numOfItems,
+                                        [=](auto n) { C[n] = A[n] + B[n]; });
     ProfInfo.push_back(Evt);
-    
+
     // last wait inevitable
     DeviceQueue.wait();
 

@@ -25,8 +25,10 @@ class optparser_t final {
 public:
   optparser_t() {
     desc_.add_options()("help", "Produce help message");
-    desc_.add_options()("size", po::value<int>()->default_value(0), "workload main size");
-    desc_.add_options()("nreps", po::value<int>()->default_value(0), "workload number of repetitions");
+    desc_.add_options()("size", po::value<int>()->default_value(0),
+                        "workload main size");
+    desc_.add_options()("nreps", po::value<int>()->default_value(0),
+                        "workload number of repetitions");
   }
 
   template <typename T>
@@ -57,4 +59,3 @@ public:
 
   bool parsed() const noexcept { return parsed_; }
 };
-

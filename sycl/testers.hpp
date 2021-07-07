@@ -94,8 +94,7 @@ template <typename T> class VectorAddTester {
   unsigned Rep_;
 
 public:
-  VectorAddTester(VectorAdd<T> &Vadder, unsigned Sz,
-                  unsigned Rep)
+  VectorAddTester(VectorAdd<T> &Vadder, unsigned Sz, unsigned Rep)
       : Vadder_(Vadder), Sz_(Sz), Rep_(Rep) {
     A_.resize(Sz_);
     B_.resize(Sz_);
@@ -169,8 +168,10 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
     unsigned Size = OptParser.template get<int>("size");
     unsigned NReps = OptParser.template get<int>("nreps");
 
-    if (Size == 0) Size = LIST_SIZE;
-    if (NReps == 0) NReps = NREPS;
+    if (Size == 0)
+      Size = LIST_SIZE;
+    if (NReps == 0)
+      NReps = NREPS;
 
     std::cout << "Using vector size = " << Size << std::endl;
     std::cout << "Using #of repetitions = " << NReps << std::endl;

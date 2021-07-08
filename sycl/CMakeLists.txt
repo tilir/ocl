@@ -23,6 +23,7 @@ set(KERNELS
   vectoradd_sharedmem
   vectoradd_wait
   vectoradd_inequal
+  vectoradd_simd
 )
 
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/dumps)

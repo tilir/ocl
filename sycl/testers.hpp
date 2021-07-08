@@ -29,6 +29,9 @@ constexpr auto sycl_read = cl::sycl::access::mode::read;
 constexpr auto sycl_write = cl::sycl::access::mode::write;
 constexpr auto host_ptr = cl::sycl::property::buffer::use_host_ptr{};
 
+// convenient namspaces
+namespace esimd = sycl::ext::intel::experimental::esimd;
+
 namespace sycltesters {
 
 namespace chrono = std::chrono;

@@ -16,6 +16,7 @@
 //------------------------------------------------------------------------------
 
 #include <CL/sycl.hpp>
+#include <boost/optional.hpp>
 
 #include <cassert>
 #include <chrono>
@@ -64,7 +65,7 @@ public:
   }
 };
 
-using EvtRet_t = std::optional<std::vector<cl::sycl::event>>;
+using EvtRet_t = boost::optional<std::vector<cl::sycl::event>>;
 
 template <typename T> class VectorAdd {
   cl::sycl::queue DeviceQueue_;

@@ -79,13 +79,13 @@ public:
     });
     ProfInfo.push_back(EvtC);
 
+// host-side test that one vadd iteration is correct
+#ifdef VERIFY
     // Host accessor (note get_access without params)
     auto A = bufferA.template get_access<sycl_read>();
     auto B = bufferB.template get_access<sycl_read>();
     auto C = bufferC.template get_access<sycl_read>();
 
-// host-side test that one vadd iteration is correct
-#ifdef VERIFY
     for (int i = 0; i < Sz; ++i)
       if (C[i] != 19 * A[i] + 26 * B[i]) {
         std::cerr << "At index: " << i << ". ";

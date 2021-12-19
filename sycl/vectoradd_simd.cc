@@ -11,12 +11,14 @@
 #define __SYCL_DEPRECATED(message)
 
 #include <CL/sycl.hpp>
-#include <CL/sycl/INTEL/esimd.hpp>
+#include <ext/intel/experimental/esimd.hpp>
 
 #include <iostream>
 #include <vector>
 
 #include "testers.hpp"
+
+using namespace cl::sycl::intel::experimental;
 
 constexpr unsigned VL = 16;
 
@@ -52,12 +54,12 @@ public:
       auto C = bufferC.template get_access<sycl_write>(cgh);
 
       auto kern = [A, B, C](cl::sycl::id<1> wiID) SYCL_ESIMD_KERNEL {
-            unsigned Offset = wiID * VL * sizeof(float);
-            esimd::simd<T, VL> VA = esimd::block_load<T, VL>(A, Offset);
-            esimd::simd<T, VL> VB = esimd::block_load<T, VL>(B, Offset);
-            esimd::simd<T, VL> VC = VA + VB;
-            esimd::block_store(C, Offset, VC);
-          };
+        unsigned Offset = wiID * VL * sizeof(float);
+        esimd::simd<T, VL> VA = esimd::block_load<T, VL>(A, Offset);
+        esimd::simd<T, VL> VB = esimd::block_load<T, VL>(B, Offset);
+        esimd::simd<T, VL> VC = VA + VB;
+        esimd::block_store(C, Offset, VC);
+      };
 
       cgh.parallel_for<class vector_add_esimd<T>>(GlobalRange, kern);
     });
@@ -84,4 +86,3 @@ public:
 int main(int argc, char **argv) {
   sycltesters::test_sequence<VectorAddESIMD<int>>(argc, argv);
 }
-

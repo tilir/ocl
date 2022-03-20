@@ -15,7 +15,7 @@
 #include <iostream>
 #include <vector>
 
-#include "testers.hpp"
+#include "vadd_testers.hpp"
 
 // class is used for kernel name
 template <typename T> class vector_add_shared;

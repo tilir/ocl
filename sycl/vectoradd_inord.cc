@@ -16,7 +16,7 @@
 #include <vector>
 
 #define INORD // to get inorder queue
-#include "testers.hpp"
+#include "vadd_testers.hpp"
 
 // class is used for kernel name
 template <typename T> class vector_add_inord;

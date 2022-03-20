@@ -3,6 +3,10 @@
 // Vector addition, SYCL way, with explicit buffers
 // no explicit sync required
 //
+// Windows OneAPI console
+// build: dpcpp -EHsc -std=c++20 -fsycl vectoradd.cc
+// run: vectoradd.exe -size=20000 -nreps=2000
+//
 //------------------------------------------------------------------------------
 //
 // This file is licensed after LGPL v3
@@ -10,12 +14,12 @@
 //
 //------------------------------------------------------------------------------
 
-#include <CL/sycl.hpp>
-
 #include <iostream>
 #include <vector>
 
-#include "testers.hpp"
+#include <CL/sycl.hpp>
+
+#include "vadd_testers.hpp"
 
 // class is used for kernel name
 template <typename T> class vector_add_buf;

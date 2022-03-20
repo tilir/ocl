@@ -16,7 +16,7 @@
 #include <iostream>
 #include <vector>
 
-#include "testers.hpp"
+#include "vadd_testers.hpp"
 
 using namespace cl::sycl::intel::experimental;
 

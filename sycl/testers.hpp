@@ -28,6 +28,7 @@
 // convenient sycl mode synonyms
 constexpr auto sycl_read = cl::sycl::access::mode::read;
 constexpr auto sycl_write = cl::sycl::access::mode::write;
+constexpr auto sycl_read_write = cl::sycl::access::mode::read_write;
 constexpr auto host_ptr = cl::sycl::property::buffer::use_host_ptr{};
 
 // convenient namspaces

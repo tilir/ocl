@@ -51,11 +51,11 @@ public:
 };
 
 template <typename T> struct BitonicSortHost : public BitonicSort<T> {
-  int Step, Stage, NSeq, SeqLen;
+  int Step, Stage, NSeq, SeqLen, Power2;
 
   void SwapElements(T *Vec) {
     for (int SNum = 0; SNum < NSeq; SNum++) {
-      int Odd = SNum / (1 << (Step - Stage));
+      int Odd = SNum / Power2;
       bool Increasing = ((Odd % 2) == 0);
       int HalfLen = SeqLen / 2;
 
@@ -72,6 +72,7 @@ template <typename T> struct BitonicSortHost : public BitonicSort<T> {
 public:
   BitonicSortHost(cl::sycl::queue &DeviceQueue) : BitonicSort<T>(DeviceQueue) {}
   EvtRet_t operator()(T *Vec, size_t Sz) override {
+    assert(Vec);
     if (std::popcount(Sz) != 1 || Sz < 2)
       throw std::runtime_error("Please use only power-of-two arrays");
 
@@ -81,6 +82,7 @@ public:
       for (Stage = Step; Stage >= 0; Stage--) {
         NSeq = 1 << (N - Stage - 1);
         SeqLen = 1 << (Stage + 1);
+        Power2 = 1 << (Step - Stage);
         SwapElements(Vec);
       }
     }
@@ -122,8 +124,10 @@ public:
       std::cout << A_[i] << " ";
     std::cout << std::endl;
 #endif
+#ifdef VERIFY
     if (!std::is_sorted(A_.begin(), A_.end()))
-      throw std::runtime_error("CPU sorting failed");
+      throw std::runtime_error("Sorting failed");
+#endif
     return {Timer_.elapsed(), EvtTiming};
   }
 };
@@ -148,6 +152,7 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
     std::cout << "Using vector size = " << (1 << Size) << std::endl;
 
     auto Q = set_queue();
+    print_info(std::cout, Q.get_device());
 
 #ifdef MEASURE_NORMAL
     BitonicSortHost<int> VaddH{Q}; // Q unused for this derived class
@@ -156,6 +161,20 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
     auto ElapsedH = TesterH.calculate();
     std::cout << "Measured host time: " << ElapsedH.first << std::endl;
 #endif
+
+    BitonicChildT BitonicSort{Q};
+    using Ty = typename BitonicChildT::type;
+    BitonicSortTester<Ty> Tester{BitonicSort, 1 << Size};
+
+    std::cout << "Initializing" << std::endl;
+    Tester.initialize();
+
+    std::cout << "Calculating" << std::endl;
+    auto Elapsed = Tester.calculate();
+
+    std::cout << "Measured time: " << Elapsed.first / 1000.0 << std::endl;
+    std::cout << "Pure execution time: " << Elapsed.second / 1000000000.0
+              << std::endl;
   } catch (cl::sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
     abort();

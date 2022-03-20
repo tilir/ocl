@@ -131,6 +131,7 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
     std::cout << "Using #of repetitions = " << NReps << std::endl;
 
     auto Q = set_queue();
+    print_info(std::cout, Q.get_device());
 
 #ifdef MEASURE_NORMAL
     VectorAddHost<int> VaddH{Q}; // Q unused for this derived class
@@ -142,8 +143,6 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
 
     VaddChildT Vadd{Q};
     VectorAddTester<typename VaddChildT::type> Tester{Vadd, Size, NReps};
-
-    print_info(std::cout, Q.get_device());
 
     std::cout << "Initializing" << std::endl;
     Tester.initialize();

@@ -44,18 +44,19 @@ public:
 
     auto &DeviceQueue = Queue();
 
-    auto Evt = DeviceQueue.submit([&](cl::sycl::handler &cgh) {
-      auto A = bufferA.template get_access<sycl_read>(cgh);
-      auto B = bufferB.template get_access<sycl_read>(cgh);
-      auto C = bufferC.template get_access<sycl_write>(cgh);
+    auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
+      auto A = bufferA.template get_access<sycl_read>(Cgh);
+      auto B = bufferB.template get_access<sycl_read>(Cgh);
+      auto C = bufferC.template get_access<sycl_write>(Cgh);
 
       auto kern = [A, B, C](cl::sycl::id<1> wiID) {
         C[wiID] = A[wiID] + B[wiID];
       };
-      cgh.parallel_for<class vector_add_buf<T>>(NumOfItems, kern);
+      Cgh.parallel_for<class vector_add_buf<T>>(NumOfItems, kern);
     });
 
     ProfInfo.push_back(Evt);
+    Evt.wait();
 
     // host-side test that one vadd iteration is correct
 #ifdef VERIFY

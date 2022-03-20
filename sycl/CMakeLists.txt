@@ -1,9 +1,28 @@
+#------------------------------------------------------------------------------
+#
+# CMake build system for DPC++/SYCL examples
+#
 # on linux (or windows with unix makefiles)
 # run as: cmake -DCMAKE_CXX_COMPILER=${DPC_COMPILER}/clang++ ..
 #
 # on windows it is like
 # with Visual Studio: cmake -T "Intel(R) oneAPI DPC++ Compiler" ..
 # with Ninja: cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp ..
+#
+#------------------------------------------------------------------------------
+#
+#  Useful options:
+#  -DUSE_BOOST if you have installed findable boost (for better option parser)
+#  -DRUNHOST run without GPU (SYCL as a host code)
+#  -DMEASURE_NORMAL to measure with reference code
+#  -DVERIFY to verify results (for instance that sorting actually sorted smth)
+#
+#------------------------------------------------------------------------------
+#
+# This file is licensed after LGPL v3
+# Look at: https://www.gnu.org/licenses/lgpl-3.0.en.html for details
+#
+#------------------------------------------------------------------------------
 
 cmake_minimum_required(VERSION 3.21)
 project(syclexamples)
@@ -36,13 +55,22 @@ find_package(Boost COMPONENTS
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 endif()
 
-#expect 3 arguments: target source define
+#expect 2-3 arguments: target source [define]
 function(buildv KERNEL SRC)
   add_executable(${KERNEL} ${SRC})
   target_compile_options(${KERNEL} PUBLIC "-fsycl" "-fsycl-unnamed-lambda")
   target_compile_features(${KERNEL} PRIVATE cxx_std_20)
-  target_compile_definitions(${KERNEL} PRIVATE ${ARGV2})
+  if (NOT "${ARGV2}" STREQUAL "")
+    target_compile_definitions(${KERNEL} PRIVATE ${ARGV2})
+  endif()
+if(RUNHOST)
+  target_compile_definitions(${KERNEL} PRIVATE RUNHOST=1)
+endif()
+if(MEASURE_NORMAL)
+  target_compile_definitions(${KERNEL} PRIVATE MEASURE_NORMAL=1)
+endif()
 if(USE_BOOST)
+  target_compile_definitions(${KERNEL} PRIVATE USE_BOOST_OPTPARSE=1)
   target_link_libraries(${KERNEL} Boost::program_options)
 endif()
 

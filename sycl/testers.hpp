@@ -20,6 +20,7 @@
 #include <cassert>
 #include <chrono>
 #include <iostream>
+#include <random>
 #include <vector>
 
 #include <CL/sycl.hpp>
@@ -83,5 +84,42 @@ inline unsigned getTime(EvtRet_t Opt) {
   }
   return AccTime;
 }
+
+inline cl::sycl::queue set_queue() {
+  auto Exception_handler = [](sycl::exception_list e_list) {
+    for (std::exception_ptr const &e : e_list)
+      std::rethrow_exception(e);
+  };
+
+#ifdef INORD
+  cl::sycl::property_list PropList{
+      sycl::property::queue::in_order(),
+      cl::sycl::property::queue::enable_profiling()};
+#else
+  cl::sycl::property_list PropList{
+      cl::sycl::property::queue::enable_profiling()};
+#endif
+
+#ifdef RUNHOST
+  cl::sycl::host_selector Hsel;
+  cl::sycl::queue Q{Hsel, Exception_handler, PropList};
+#else
+  cl::sycl::gpu_selector GPsel;
+  cl::sycl::queue Q{GPsel, Exception_handler, PropList};
+#endif
+
+  return Q;
+}
+
+struct Dice {
+  std::uniform_int_distribution<int> uid;
+
+  Dice(int min, int max) : uid(min, max) {}
+  int operator()() {
+    static std::random_device rd;
+    static std::mt19937 rng{rd()};
+    return uid(rng);
+  }
+};
 
 } // namespace sycltesters

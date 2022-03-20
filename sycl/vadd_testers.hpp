@@ -130,27 +130,7 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
     std::cout << "Using vector size = " << Size << std::endl;
     std::cout << "Using #of repetitions = " << NReps << std::endl;
 
-    auto Exception_handler = [](sycl::exception_list e_list) {
-      for (std::exception_ptr const &e : e_list)
-        std::rethrow_exception(e);
-    };
-
-#ifdef INORD
-    cl::sycl::property_list PropList{
-        sycl::property::queue::in_order(),
-        cl::sycl::property::queue::enable_profiling()};
-#else
-    cl::sycl::property_list PropList{
-        cl::sycl::property::queue::enable_profiling()};
-#endif
-
-#ifdef RUNHOST
-    cl::sycl::host_selector Hsel;
-    cl::sycl::queue Q{Hsel, Exception_handler, PropList};
-#else
-    cl::sycl::gpu_selector GPsel;
-    cl::sycl::queue Q{GPsel, Exception_handler, PropList};
-#endif
+    auto Q = set_queue();
 
 #ifdef MEASURE_NORMAL
     VectorAddHost<int> VaddH{Q}; // Q unused for this derived class
@@ -175,10 +155,10 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
     std::cout << "Pure execution time: " << Elapsed.second / 1000000000.0
               << std::endl;
   } catch (cl::sycl::exception const &err) {
-    std::cerr << "SYCL ERROR: " << err.what() << ":\n";
+    std::cerr << "SYCL ERROR: " << err.what() << "\n";
     abort();
   } catch (std::exception const &err) {
-    std::cerr << "Exception " << err.what() << ":\n";
+    std::cerr << "Exception: " << err.what() << "\n";
     abort();
   } catch (...) {
     std::cerr << "Unknown error\n";

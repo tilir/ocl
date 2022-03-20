@@ -65,6 +65,7 @@ set(KERNELS
   vectoradd_wait
   vectoradd_inequal
   vectoradd_simd
+  bitonicsort
 )
 
 if(NOT WIN32)

@@ -156,7 +156,8 @@ template <typename MMChildT> void test_sequence(int argc, char **argv) {
   std::cout << "Welcome to matrix multiplication" << std::endl;
 
   try {
-    size_t Ax, Ay, By, Lsz;
+    size_t Ax, Ay, By;
+    unsigned Lsz;
 
     optparser_t OptParser;
     OptParser.template add<int>("ax", DEF_AX);

@@ -27,7 +27,7 @@
 # for release measurements try:
 # cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DMEASURE_NORMAL=1 -DCMAKE_BUILD_TYPE=Release ..
 
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.18)
 project(syclexamples)
 
 if(USE_BOOST)
@@ -45,6 +45,9 @@ if(WIN32)
   set(CMAKE_CXX_COMPILE_OBJECT "<CMAKE_CXX_COMPILER> -fsycl /nologo <DEFINES> <INCLUDES> /EHsc <FLAGS> /Fo<OBJECT> -c <SOURCE>")
   set(CMAKE_CXX_CREATE_STATIC_LIBRARY "lib /nologo <OBJECTS> /out:<TARGET>")
   set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER> -fsycl /nologo <OBJECTS> -o <TARGET> <LINK_LIBRARIES>")
+else()
+  set(CMAKE_EXE_LINKER_FLAGS "-fsycl")
+  set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER> -fsycl <OBJECTS> -o <TARGET> <LINK_LIBRARIES>")
 endif()
 
 #find_package(Intel_DPCPP REQUIRED)

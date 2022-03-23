@@ -161,14 +161,14 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
     using Ty = typename BitonicChildT::type;
 #ifdef MEASURE_NORMAL
     BitonicSortHost<Ty> BitonicSortH{Q}; // Q unused for this derived class
-    BitonicSortTester<Ty> TesterH{BitonicSortH, 1 << Size};
+    BitonicSortTester<Ty> TesterH{BitonicSortH, 1u << Size};
     TesterH.initialize();
     auto ElapsedH = TesterH.calculate();
     std::cout << "Measured host time: " << ElapsedH.first << std::endl;
 #endif
 
     BitonicChildT BitonicSort{Q, LocalSize};
-    BitonicSortTester<Ty> Tester{BitonicSort, 1 << Size};
+    BitonicSortTester<Ty> Tester{BitonicSort, 1u << Size};
 
     std::cout << "Initializing" << std::endl;
     Tester.initialize();

@@ -98,6 +98,7 @@ set(KERNELS
   vectoradd_simd
   bitonicsort
   matmult
+  matmult_local
 )
 
 if(NOT WIN32)
@@ -112,6 +113,7 @@ endforeach()
 # special targets with defines
 buildv(vectoradd_hostmem vectoradd_sharedmem.cc "HOST_ALLOC=1")
 buildv(matmult_nopriv matmult.cc "NOPRIVATE=1")
+buildv(matmult_local_nobarrier matmult_local.cc "NOBARRIER=1")
 
 # dummy install
 install()

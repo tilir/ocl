@@ -28,6 +28,8 @@
 constexpr auto sycl_read = cl::sycl::access::mode::read;
 constexpr auto sycl_write = cl::sycl::access::mode::write;
 constexpr auto sycl_read_write = cl::sycl::access::mode::read_write;
+constexpr auto sycl_local = cl::sycl::access::target::local;
+constexpr auto sycl_local_fence = cl::sycl::access::fence_space::local_space;
 constexpr auto host_ptr = cl::sycl::property::buffer::use_host_ptr{};
 
 // convenient namspaces

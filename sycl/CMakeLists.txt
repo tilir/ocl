@@ -24,6 +24,9 @@
 #
 #------------------------------------------------------------------------------
 
+# for release measurements try:
+# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DMEASURE_NORMAL=1 -DCMAKE_BUILD_TYPE=Release ..
+
 cmake_minimum_required(VERSION 3.21)
 project(syclexamples)
 
@@ -94,6 +97,7 @@ set(KERNELS
   vectoradd_inequal
   vectoradd_simd
   bitonicsort
+  matmult
 )
 
 if(NOT WIN32)
@@ -105,8 +109,9 @@ foreach(KERNEL ${KERNELS})
   buildv(${KERNEL} ${KERNEL}.cc)
 endforeach()
 
-# special target with define
+# special targets with defines
 buildv(vectoradd_hostmem vectoradd_sharedmem.cc "HOST_ALLOC=1")
+buildv(matmult_nopriv matmult.cc "NOPRIVATE=1")
 
 # dummy install
 install()

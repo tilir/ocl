@@ -6,7 +6,6 @@
 // Macros to control things:
 //  -DRUNHOST        : run as a host code (debugging, etc)
 //  -DINORD          : use inorder queues
-//  -DMEASURE_NORMAL : measure with normal host code
 //
 //------------------------------------------------------------------------------
 //

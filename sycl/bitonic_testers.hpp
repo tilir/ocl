@@ -4,8 +4,9 @@
 // Avoiding tons of boilerplate otherwise
 //
 // Macros to control things:
-//  -DRUNHOST        : run as a host code (debugging, etc)
-//  -DINORD          : use inorder queues
+//  * inherited from testers.hpp: RUNHOST, INORD...
+//  -DVISUALIZE      : print out arrays
+//  -DVERIFY         : check for sorted
 //  -DMEASURE_NORMAL : measure with normal host code
 //
 //------------------------------------------------------------------------------
@@ -35,6 +36,7 @@
 #include "testers.hpp"
 
 constexpr int DEF_SIZE = 10;
+constexpr int DEF_BLOCK_SIZE = 1;
 
 namespace sycltesters {
 
@@ -133,15 +135,17 @@ public:
 };
 
 template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
-  std::cout << "Welcome to vector addition" << std::endl;
+  std::cout << "Welcome to bitonic sort" << std::endl;
 
   try {
-    unsigned Size = 0, NReps = 0;
+    unsigned Size, LocalSize;
 
     optparser_t OptParser;
+    OptParser.template add<int>("lsz", DEF_BLOCK_SIZE);
     OptParser.parse(argc, argv);
 
     Size = OptParser.template get<int>("size");
+    LocalSize = OptParser.template get<int>("lsz");
 
     if (Size > 31)
       throw std::runtime_error("Size is logarithmic, 31 is max");
@@ -154,16 +158,16 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
     auto Q = set_queue();
     print_info(std::cout, Q.get_device());
 
+    using Ty = typename BitonicChildT::type;
 #ifdef MEASURE_NORMAL
-    BitonicSortHost<int> VaddH{Q}; // Q unused for this derived class
-    BitonicSortTester<int> TesterH{VaddH, (1 << Size)};
+    BitonicSortHost<Ty> BitonicSortH{Q}; // Q unused for this derived class
+    BitonicSortTester<Ty> TesterH{BitonicSortH, 1 << Size};
     TesterH.initialize();
     auto ElapsedH = TesterH.calculate();
     std::cout << "Measured host time: " << ElapsedH.first << std::endl;
 #endif
 
-    BitonicChildT BitonicSort{Q};
-    using Ty = typename BitonicChildT::type;
+    BitonicChildT BitonicSort{Q, LocalSize};
     BitonicSortTester<Ty> Tester{BitonicSort, 1 << Size};
 
     std::cout << "Initializing" << std::endl;

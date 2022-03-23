@@ -21,15 +21,14 @@
 // class is used for kernel name
 template <typename T> class bitonic_sort_buf;
 
-constexpr int BLOCK_SIZE = 1;
-
 template <typename T>
 class BitonicSortBuf : public sycltesters::BitonicSort<T> {
   using sycltesters::BitonicSort<T>::Queue;
+  unsigned Lsz_;
 
 public:
-  BitonicSortBuf(cl::sycl::queue &DeviceQueue)
-      : sycltesters::BitonicSort<T>(DeviceQueue) {}
+  BitonicSortBuf(cl::sycl::queue &DeviceQueue, unsigned Lsz)
+      : sycltesters::BitonicSort<T>(DeviceQueue), Lsz_(Lsz) {}
 
   sycltesters::EvtRet_t operator()(T *Vec, size_t Sz) override {
     assert(Vec);
@@ -46,13 +45,14 @@ public:
         int SeqLen = 1 << (Stage + 1);
         int Power2 = 1 << (Step - Stage);
         cl::sycl::range<1> NumOfItems{Sz};
-        cl::sycl::range<1> BlockSize{BLOCK_SIZE};
+        cl::sycl::range<1> BlockSize{Lsz_};
         cl::sycl::nd_range<1> Range{NumOfItems, BlockSize};
 
         // Offload the work to kernel.
         auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
           auto AVec = ABuf.template get_access<sycl_read_write>(Cgh);
-          Cgh.parallel_for<class bitonic_sort_buf<T>>(Range, [=](cl::sycl::nd_item<1> Item) {
+
+          auto Kernsort = [=](cl::sycl::nd_item<1> Item) {
             int I = Item.get_global_id(0);
             int SeqNum = I / SeqLen;
             int Odd = SeqNum / Power2;
@@ -68,7 +68,9 @@ public:
                 AVec[J] = Temp;
               }
             }
-          });
+          };
+
+          Cgh.parallel_for<class bitonic_sort_buf<T>>(Range, Kernsort);
         });
         ProfInfo.push_back(Evt);
         Evt.wait();

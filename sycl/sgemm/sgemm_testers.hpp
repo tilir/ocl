@@ -160,12 +160,12 @@ template <typename MMChildT> void test_sequence(int argc, char **argv) {
     unsigned Lsz;
 
     optparser_t OptParser;
-    OptParser.template add<int>("ax", DEF_AX);
-    OptParser.template add<int>("ay", DEF_AY);
-    OptParser.template add<int>("by", DEF_BY);
-    OptParser.template add<int>("lsz", DEF_LSZ);
+    OptParser.template add<int>("ax", DEF_AX, "size X of matrix A in A * B");
+    OptParser.template add<int>("ay", DEF_AY, "size Y of matrix A in A * B");
+    OptParser.template add<int>("by", DEF_BY, "size Y of matrix B in A * B");
+    OptParser.template add<int>("lsz", DEF_LSZ, "local size");
 #ifdef MEASURE_NORMAL
-    OptParser.template add<int>("vis", 0);
+    OptParser.template add<int>("vis", 0, "pass 1 to visualize matrices");
 #endif
     OptParser.parse(argc, argv);
 

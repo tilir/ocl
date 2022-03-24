@@ -116,15 +116,13 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
     unsigned Size = 0, NReps = 0;
 
     optparser_t OptParser;
+    OptParser.template add<int>("size", LIST_SIZE, "size of vectors to add");
+    OptParser.template add<int>("nreps", NREPS,
+                                "number of repetitions in tester loop");
     OptParser.parse(argc, argv);
 
     Size = OptParser.template get<int>("size");
     NReps = OptParser.template get<int>("nreps");
-
-    if (Size == 0)
-      Size = LIST_SIZE;
-    if (NReps == 0)
-      NReps = NREPS;
 
     std::cout << "Using vector size = " << Size << std::endl;
     std::cout << "Using #of repetitions = " << NReps << std::endl;

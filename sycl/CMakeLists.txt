@@ -27,7 +27,7 @@
 # for release measurements try:
 # cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DMEASURE_NORMAL=1 -DCMAKE_BUILD_TYPE=Release ..
 
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.15)
 project(syclexamples)
 
 if(USE_BOOST)
@@ -50,8 +50,6 @@ else()
   set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER> -fsycl <OBJECTS> -o <TARGET> <LINK_LIBRARIES>")
 endif()
 
-#find_package(Intel_DPCPP REQUIRED)
-
 if(USE_BOOST)
 find_package(Boost COMPONENTS
              program_options
@@ -61,62 +59,25 @@ find_package(Boost COMPONENTS
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 endif()
 
-#expect 2-3 arguments: target source [define]
-function(buildv KERNEL SRC)
-  add_executable(${KERNEL} ${SRC})
-  target_compile_options(${KERNEL} PUBLIC "-fsycl" "-fsycl-unnamed-lambda")
-  target_compile_features(${KERNEL} PRIVATE cxx_std_20)
-  if (NOT "${ARGV2}" STREQUAL "")
-    target_compile_definitions(${KERNEL} PRIVATE ${ARGV2})
-  endif()
-if(RUNHOST)
-  target_compile_definitions(${KERNEL} PRIVATE RUNHOST=1)
-endif()
-if(MEASURE_NORMAL)
-  target_compile_definitions(${KERNEL} PRIVATE MEASURE_NORMAL=1)
-endif()
-if(USE_BOOST)
-  target_compile_definitions(${KERNEL} PRIVATE USE_BOOST_OPTPARSE=1)
-  target_link_libraries(${KERNEL} Boost::program_options)
-endif()
+# function to build single kernel
+# RUNHOST and MEASURE_NORMAL env consumed here
+include(cmake/buildv.cmake)
 
-# under WIN32 OneAPI ditribution have Release driver, so no dumps possible through env
-if(NOT WIN32)
-  file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/dumps/${KERNEL})
-  add_test(NAME ${KERNEL}_run
-     COMMAND ${CMAKE_COMMAND} -E env "IGC_ShaderDumpEnable=1" env "IGC_ShaderDumpEnableAll=1" env "IGC_DumpToCustomDir=${CMAKE_BINARY_DIR}/dumps/${KERNEL}" ${CMAKE_BINARY_DIR}/${KERNEL}
-     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-  )
-endif()
-endfunction() # buildv
+# interface testers library
+add_library(testers-frame INTERFACE)
+target_include_directories(testers-frame INTERFACE framework)
 
-set(KERNELS
-  vectoradd
-  vectoradd_complexdeps
-  vectoradd_devicemem
-  vectoradd_inord
-  vectoradd_sharedmem
-  vectoradd_wait
-  vectoradd_inequal
-  vectoradd_simd
-  bitonicsort
-  matmult
-  matmult_local
-)
+# vadd related experiments
+add_subdirectory(vadd)
 
-if(NOT WIN32)
+# bitnoic sort related
+add_subdirectory(bitonic)
+
+# matrix multiplications
+add_subdirectory(sgemm)
+
+# dump folder for shader dumps if any
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/dumps)
-endif()
-
-# common includes and libs
-foreach(KERNEL ${KERNELS})
-  buildv(${KERNEL} ${KERNEL}.cc)
-endforeach()
-
-# special targets with defines
-buildv(vectoradd_hostmem vectoradd_sharedmem.cc "HOST_ALLOC=1")
-buildv(matmult_nopriv matmult.cc "NOPRIVATE=1")
-buildv(matmult_local_nobarrier matmult_local.cc "NOBARRIER=1")
 
 # dummy install
 install()

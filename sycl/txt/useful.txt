@@ -1,0 +1,8 @@
+clang-format version 10.0.0-4ubuntu1
+find -name "*.hpp" -o -name "*.cc" -exec clang-format -i {} \;
+
+Windows build, OneAPI console:
+cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release ..
+
+Windows build, measure with host:
+cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DMEASURE_NORMAL=1 -DCMAKE_BUILD_TYPE=Release ..

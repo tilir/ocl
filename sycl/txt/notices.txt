@@ -1,0 +1,38 @@
+TGLLP, OneAPI
+
+(1) Bitonic sort
+The very existing of local size makes magic happen
+
+bitonic\bitonicsort.exe -size=23
+bitonic\bitonicsort.exe -size=23 -lsz=16
+
+For both host (CPU) time is ~2.4 seconds
+GPU time is 4.5 seconds and 0.7 seconds respectively
+
+(2) GEMM: local size=1 increases but local size=16 decreases time compared to simple iteration
+
+sgemm\matmult.exe
+0.13
+
+sgemm\matmult_local.exe
+2.4
+
+sgemm\matmult_local.exe -lsz=16
+0.13
+
+Also just existing of local space makes good things to happen:
+sgemm\matmult.exe -lsz=16
+0.13
+
+(3) Accumulator in private mem
+
+sgemm\matmult.exe -ax=4096 -ay=4096 -by=2048
+sgemm\matmult_nopriv.exe -ax=4096 -ay=4096 -by=2048
+
+Difference on GPU 3 seconds vs 4 seconds
+On such sizes -lsz=16 speedup is almost invisible for both
+
+On the other hand:
+
+sgemm\matmult_local.exe -ax=4096 -ay=4096 -by=2048 -lsz=16
+Here we can see 0.8 seconds (!)

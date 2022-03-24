@@ -141,17 +141,16 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
     unsigned Size, LocalSize;
 
     optparser_t OptParser;
-    OptParser.template add<int>("lsz", DEF_BLOCK_SIZE);
+    OptParser.template add<int>(
+        "size", DEF_SIZE, "logarithmic size to sort (1 << size) is real size");
+    OptParser.template add<int>("lsz", DEF_BLOCK_SIZE, "local size");
     OptParser.parse(argc, argv);
 
     Size = OptParser.template get<int>("size");
     LocalSize = OptParser.template get<int>("lsz");
 
-    if (Size > 31)
-      throw std::runtime_error("Size is logarithmic, 31 is max");
-
-    if (Size == 0)
-      Size = DEF_SIZE;
+    if (Size < 2 || Size > 31)
+      throw std::runtime_error("Size is logarithmic, 1 is min, 31 is max");
 
     std::cout << "Using vector size = " << (1 << Size) << std::endl;
 

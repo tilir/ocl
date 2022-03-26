@@ -1,6 +1,7 @@
 set(KERNELS  
   matmult
   matmult_local
+  matmult_groups
 )
 
 # common includes and libs

@@ -4,8 +4,7 @@
 // Avoiding tons of boilerplate otherwise
 //
 // Macros to control things:
-//  * inherited from testers.hpp: RUNHOST, INORD...
-//  * -DMEASURE_NORMAL : measure with normal host code
+//  * inherited from testers.hpp: RUNHOST, MEASURE_NORMAL, INORD...
 //
 //------------------------------------------------------------------------------
 //

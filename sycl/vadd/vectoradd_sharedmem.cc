@@ -56,6 +56,9 @@ public:
     // last wait inevitable
     DeviceQueue.wait();
 
+    // copy back
+    std::copy(C, C + Sz, CVec);
+
 // host-side test that one vadd iteration is correct
 #ifdef VERIFY
     for (int i = 0; i < Sz; ++i)

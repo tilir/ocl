@@ -3,6 +3,7 @@
 // Vector addition, SYCL way, with malloc_device
 // Explicit wait on queue is basic synchronization mechanism
 // Try -DNOWAIT to trigger strange bugs
+// Try inorder queues as an alternative
 //
 //------------------------------------------------------------------------------
 //

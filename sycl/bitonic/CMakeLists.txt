@@ -1,5 +1,6 @@
 set(KERNELS
   bitonicsort
+  bitonic_shared
 )
 
 # build kernels
@@ -8,5 +9,5 @@ foreach(KERNEL ${KERNELS})
 endforeach()
 
 # special parameters
-# buildv(kernel source.cc "SOME_VAR=1")
+buildv(bitonic_host bitonic_shared.cc "HOST_ALLOC=1")
 

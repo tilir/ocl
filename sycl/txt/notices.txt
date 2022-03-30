@@ -36,3 +36,8 @@ On the other hand:
 
 sgemm\matmult_local.exe -ax=4096 -ay=4096 -by=2048 -lsz=16
 Here we can see 0.8 seconds (!)
+
+(4) Bitonic sort
+
+Sort in shared memory for integrated graphics is 1.5 times faster.
+

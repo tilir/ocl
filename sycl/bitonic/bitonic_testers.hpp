@@ -5,9 +5,10 @@
 //
 // Macros to control things:
 //  * inherited from testers.hpp: RUNHOST, INORD...
-//  -DVISUALIZE      : print out arrays
-//  -DVERIFY         : check for sorted
-//  -DMEASURE_NORMAL : measure with normal host code
+//  -DVISUALIZE         : print out arrays
+//  -DVERIFY            : check for sorted
+//  -DMEASURE_NORMAL    : measure with normal host code
+//  -DCHECK_BITONIC_CPU : check against bitonic sort CPU code
 //
 //------------------------------------------------------------------------------
 //
@@ -75,6 +76,7 @@ public:
   BitonicSortHost(cl::sycl::queue &DeviceQueue) : BitonicSort<T>(DeviceQueue) {}
   EvtRet_t operator()(T *Vec, size_t Sz) override {
     assert(Vec);
+#if CHECK_BITONIC_CPU
     if (std::popcount(Sz) != 1 || Sz < 2)
       throw std::runtime_error("Please use only power-of-two arrays");
 
@@ -88,6 +90,9 @@ public:
         SwapElements(Vec);
       }
     }
+#else
+    std::sort(Vec, Vec + Sz);
+#endif
     return {}; // nothing to construct as event
   }
 };

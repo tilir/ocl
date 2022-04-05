@@ -56,3 +56,9 @@ Even more: ineffective kernel with loop on GPU is increadibly effective
 > bitonic_loop_shared.exe -size=25 -lsz=32
 Measured time: 0.429
 Pure execution time: 0.282504
+
+If both loops are offloaded, it is not a big issue for TGLLP at least and results are even better
+
+>bitonic\bitonic_twice_shared.exe -size=25 -lsz=32
+Measured time: 0.39
+Pure execution time: 0.259704

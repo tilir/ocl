@@ -2,6 +2,7 @@ set(KERNELS
   bitonicsort
   bitonic_shared
   bitonic_loop_shared
+  bitonic_twice_shared
 )
 
 # build kernels
@@ -12,4 +13,4 @@ endforeach()
 # special parameters
 buildv(bitonic_host bitonic_shared.cc "HOST_ALLOC=1")
 buildv(bitonic_loop_host bitonic_loop_shared.cc "HOST_ALLOC=1")
-
+buildv(bitonic_twice_host bitonic_twice_shared.cc "HOST_ALLOC=1")

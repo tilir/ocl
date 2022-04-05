@@ -1,0 +1,140 @@
+\documentclass[a4paper,12pt,oneside]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage[english]{babel}
+\usepackage[usenames]{xcolor}
+\usepackage{etoolbox}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{cmap}
+\usepackage{indentfirst}
+\usepackage{makeidx}
+\usepackage[unicode]{hyperref}
+
+\hypersetup{
+%bookmarks=true,            % show bookmarks bar?
+%unicode=false,             % non-Latin characters in Acrobat’s bookmarks
+pdfproducer={Producer},    % producer of the document
+pdfkeywords={keywords},    % list of keywords
+pdfnewwindow=true,         % links in new window
+colorlinks=true,           % false: boxed links; true: colored links
+linkcolor=black,           % color of internal links
+citecolor=black,           % color of links to bibliography
+    filecolor=black,           % color of file links
+    urlcolor=black             % color of external links
+}
+
+\definecolor{olivegreen}{cmyk}{0.64,0,0.95,0.40}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{
+language=C++,                           % Code langugage
+basicstyle=\ttfamily,                   % Code font, Examples: \footnotesize, \ttfamily
+keywordstyle=\color{olivegreen},        % Keywords font ('*' = uppercase)
+commentstyle=\color{gray},              % Comments font
+stringstyle=\color{mauve},
+numbers=left,                           % Line nums position
+numberstyle=\tiny,
+numbersep=10pt,
+stepnumber=1,                           % Step between two line-numbers
+frame=none,                             % A frame around the code
+tabsize=2,                              % Default tab size
+captionpos=b,                           % Caption-position = bottom
+breaklines=true,                        % Automatic line breaking?
+breakatwhitespace=false,                % Automatic breaks only at whitespace?
+showspaces=false,                       % Dont make spaces visible
+showstringspaces=false,
+showtabs=false,                         % Dont make tabls visible
+columns=flexible,                       % Column format
+title=\lstname,
+caption={},
+extendedchars=\true,
+inputencoding=utf8,
+}
+
+\begin{document}
+\section{SYCL memory basics}\label{sec:Basics}
+
+% 1. Some common words about SYCL as generic system
+% 2. We will dive deeper but first we need to understand SYCL model
+
+\subsection{Host, device and shared memory}\label{subsec:HostDevice}
+
+% 1. Explicit and implicit memory send back and forth
+% 2. Shared memory may be really efficient for integrated GPUs
+
+\subsection{Private, local and global memory}\label{subsec:PrivLocal}
+
+% 1. SYCL accessors: global and local
+% 2. Glorious GEMM example 
+% 3. Private memory for explicit workgroup
+
+\section{GPU hardware and how to think about memory}\label{sec:Basics}
+
+% 1. Programming for GPU means (at least some) knowledge of architecture
+% 2. Bad surprises may happen if you don't (example with too much private memory)
+
+\subsection{Stateless, stateful and local memory}\label{subsec:StatelessFull}
+
+% 1. Idea of binding tables and stateful buffers
+% 2. Stateless memory is normal memory
+% 3. Local memory is a chunk of explicit cache
+
+\subsection{Scratch, TPM and registers}\label{subsec:ScratchTPM}
+
+% 1. Register file and GRF size estimation
+% 2. Per-thread memory with hardware support (scratch)
+% 3. Thread priovate memory may be no better then global buffer
+
+\section{Full stack and how to understand your compiler}\label{sec:Compiler}
+
+% 1. Compilers play really huge role in modern compute world
+% 2. Scheme of online and offline compilation
+
+\subsection{Stateful to stateless transformation}\label{subsec:ToStateless}
+
+% 1. When this transformation is possible and useful
+% 2. How it happens and how to block it
+
+\subsection{Generic address space resolution}\label{subsec:GenAddr}
+
+% 1. Motivating synthetic case
+% 2. Why generic addr spaces are disaster
+
+\subsection{Workgroups are useful}\label{subsec:Wgroups}
+
+% 1. Implicit vectorization between threads
+% 2. Stunning example in bitonic sort
+
+\subsection{Spill means no performance}\label{subsec:Spills}
+
+% 1. Register allocation and spills
+% 2. Measures
+
+\subsection{Memory bank conflicts}\label{subsec:Banks}
+
+% 1. Mental model of memory bank
+% 2. What is bank conflict, example
+
+\section{Vectorization and more}\label{sec:Vectors}
+
+% 1. Explicit SIMD and problem of inner loop vectorization
+% 2. Working inside subgroup means using the whole GRF (in theory)
+
+\subsection{Gathering accesses and Laplace equation}\label{subsec:Banks}
+
+% 1. Idea of gathers and scatters in hardware
+% 2. Example of Laplace equation and making things better
+
+\subsection{Explicit stateful memory}\label{subsec:Banks}
+
+% 1. How to force stateful memory from the host code
+% 2. Why do you want it
+
+\subsection{Samplers for compute}\label{subsec:Banks}
+
+% 1. Samplers and images are guests from 3D world: basic SYCL support
+% 2. Can we sample any stateful buffer?
+
+\end{document}

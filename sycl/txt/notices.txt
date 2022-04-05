@@ -39,5 +39,20 @@ Here we can see 0.8 seconds (!)
 
 (4) Bitonic sort
 
+Host std::sort reference is 2.850 seconds
+
 Sort in shared memory for integrated graphics is 1.5 times faster.
 
+> bitonic\bitonicsort.exe -size=25 -lsz=32
+Measured time: 2.994
+Pure execution time: 2.78883
+
+> bitonic\bitonic_shared.exe -size=25 -lsz=32
+Measured time: 1.493
+Pure execution time: 1.30003
+
+Even more: ineffective kernel with loop on GPU is increadibly effective
+
+> bitonic_loop_shared.exe -size=25 -lsz=32
+Measured time: 0.429
+Pure execution time: 0.282504

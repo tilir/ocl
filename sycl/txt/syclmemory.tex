@@ -1,16 +1,16 @@
 \documentclass[a4paper,12pt,oneside]{article}
 
 \usepackage[utf8]{inputenc}
-\usepackage[T2A]{fontenc}
 \usepackage[english]{babel}
 \usepackage[usenames]{xcolor}
 \usepackage{etoolbox}
 \usepackage{listings}
 \usepackage{graphicx}
-\usepackage{cmap}
 \usepackage{indentfirst}
 \usepackage{makeidx}
 \usepackage[unicode]{hyperref}
+\usepackage{cmap}
+\usepackage[T2A]{fontenc}
 
 \hypersetup{
 %bookmarks=true,            % show bookmarks bar?
@@ -59,10 +59,111 @@ inputencoding=utf8,
 % 1. Some common words about SYCL as generic system
 % 2. We will dive deeper but first we need to understand SYCL model
 
+SYCL is a single-source programming model. This poses a problem. Normaly in heterogeneous systems, there are a diverse variety of memory types (we'll see some of them later). On the other hand, in C++ all memory is the same. So the main problem for single-source system is to find a way to somehow map one upto another.
+
+Central ideas here are ideas of \textbf{buffer} and \textbf{accessor}
+
+We will illustrate this with very basic example, which adds two vectors.
+
+Lets abbreviate things (SYCL often allows really long namespace chains).
+
+\begin{lstlisting}
+constexpr auto host_ptr = 
+    cl::sycl::property::buffer::use_host_ptr{};
+\end{lstlisting}
+
+This is buffer attribute, showing, that buffer have underlying host pointer. Next buffer creation is really not hard.
+
+\begin{lstlisting}
+// T const *AVec is host pointer to vector A
+// size_t Sz is vector size
+cl::sycl::range<1> NumOfItems{Sz};
+cl::sycl::buffer<T, 1> bufferA(AVec, NumOfItems, {host_ptr});
+\end{lstlisting}
+
+We are specifying host pointer, range, and leaving everything else to SYCL API. Now our buffer have its representative in the SYCL world. It will manage data send back and forth if required. If we do not want it to write back after kernel is done, we can block writeback explicitly.
+
+\begin{lstlisting}
+BufferA.set_final_data(nullptr);
+\end{lstlisting}
+
+Inside command group handler we also will need two simple abbreviations for reead-only and write-only things.
+
+\begin{lstlisting}
+constexpr auto sycl_read = cl::sycl::access::mode::read;
+constexpr auto sycl_write = cl::sycl::access::mode::write;
+\end{lstlisting}
+
+And now lets get an \textbf{accessor} A. Accessors are C++ objects, acting as pointers to the corresponding address space. There is no notion of address space in C++, so we need this abstract layer to fill the gap.
+
+\begin{lstlisting}
+auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
+// .....
+  auto A = BufferA.template get_access<sycl_read>(Cgh);
+\end{lstlisting}
+
+Which kind of memory are pointed-to by this accessor? Inside \lstinline!cl::sycl::buffer!, method \lstinline!get_access! returns accessor to global memory only. That is why now we will limit ourselves only with different flavors of global memory. For other memory kinds, see (\ref{subsec:PrivLocal}) and later. Inside offload working with such accessor, indexed by SYCL id is much like working with host pointer, indexed by integral value.
+
+\begin{lstlisting}
+auto kern = [A, B, C](cl::sycl::id<1> wiID) {
+  C[wiID] = A[wiID] + B[wiID];
+};
+Cgh.parallel_for<class vector_add_buf<T>>(NumOfItems, kern);
+\end{lstlisting}
+
+At first glance this looks slightly over compilated? Yes, it should. For some reasons we need:
+
+\begin{itemize}
+\item Create buffer from host pointer. Capture this buffer to device queue submit.
+\item Get accessor from buffer. Capture this accessor to kernel lambda. At this point you have some idea about which type of memory you are addressing.
+\item Use accessor inside kernel lambda, index it by workitem id.
+\end{itemize}
+
+Even more: we can have this line, getting an accessor not only inside device queue. We might have it in host code, after we have writeback to buffer \lstinline!C!.
+
+\begin{lstlisting}
+auto C = BufferC.template get_access<sycl_read>();
+\end{lstlisting}
+
+Host-side accessor also behaves like pointer with same indexing operator and we can check on host side that everything is correct.
+
+Is it the only way? Can we do things different? Lets start investigating...
+
 \subsection{Host, device and shared memory}\label{subsec:HostDevice}
 
 % 1. Explicit and implicit memory send back and forth
 % 2. Shared memory may be really efficient for integrated GPUs
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\textwidth]{pictures/sycl-device-and-shared-mem.pdf}
+\caption{SYCL device and shared memory}
+\label{fig:sycl-device-and-shared-mem}
+\end{figure}
+
+Figure (\ref{fig:sycl-device-and-shared-mem}) represents our first, rather naive mental model of host, device and shared memory. You may think that GPU have its own memory onboard, and CPU does as well. So when you are working with buffers as we did in examples to (\ref{sec:Basics}), you explicitly instruct SYCL runtime when to move memory from CPU to GPU and when to read results back.
+
+Other way to write vector add is to write it using shared memory.
+
+\begin{lstlisting}
+auto *A = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
+auto *B = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
+auto *C = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
+
+// copy to shared memory
+std::copy(AVec, AVec + Sz, A);
+std::copy(BVec, BVec + Sz, B);
+
+DeviceQueue.parallel_for(numOfItems,
+    [=](auto n) { C[n] = A[n] + B[n]; });
+
+DeviceQueue.wait();
+
+// copy back to normal memory
+std::copy(C, C + Sz, CVec);
+\end{lstlisting}
+
+In this case you are not telling device queue to create buffers or accessors. Instead you just order to put everything in shared memory and let hardware to synchronize this memory in the background.
 
 \subsection{Private, local and global memory}\label{subsec:PrivLocal}
 
@@ -70,7 +171,7 @@ inputencoding=utf8,
 % 2. Glorious GEMM example 
 % 3. Private memory for explicit workgroup
 
-\section{GPU hardware and how to think about memory}\label{sec:Basics}
+\section{GPU hardware and how to think about memory}\label{sec:GPUHW}
 
 % 1. Programming for GPU means (at least some) knowledge of architecture
 % 2. Bad surprises may happen if you don't (example with too much private memory)
@@ -122,17 +223,17 @@ inputencoding=utf8,
 % 1. Explicit SIMD and problem of inner loop vectorization
 % 2. Working inside subgroup means using the whole GRF (in theory)
 
-\subsection{Gathering accesses and Laplace equation}\label{subsec:Banks}
+\subsection{Gathering accesses and Laplace equation}\label{subsec:Laplace}
 
 % 1. Idea of gathers and scatters in hardware
 % 2. Example of Laplace equation and making things better
 
-\subsection{Explicit stateful memory}\label{subsec:Banks}
+\subsection{Explicit stateful memory}\label{subsec:Stateful}
 
 % 1. How to force stateful memory from the host code
 % 2. Why do you want it
 
-\subsection{Samplers for compute}\label{subsec:Banks}
+\subsection{Samplers for compute}\label{subsec:Samplers}
 
 % 1. Samplers and images are guests from 3D world: basic SYCL support
 % 2. Can we sample any stateful buffer?

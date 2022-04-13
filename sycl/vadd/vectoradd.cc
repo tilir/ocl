@@ -35,19 +35,19 @@ public:
                                    size_t Sz) override {
     std::vector<cl::sycl::event> ProfInfo;
     cl::sycl::range<1> NumOfItems{Sz};
-    cl::sycl::buffer<T, 1> bufferA(AVec, NumOfItems, {host_ptr});
-    cl::sycl::buffer<T, 1> bufferB(BVec, NumOfItems, {host_ptr});
-    cl::sycl::buffer<T, 1> bufferC(CVec, NumOfItems, {host_ptr});
+    cl::sycl::buffer<T, 1> BufferA(AVec, NumOfItems, {host_ptr});
+    cl::sycl::buffer<T, 1> BufferB(BVec, NumOfItems, {host_ptr});
+    cl::sycl::buffer<T, 1> BufferC(CVec, NumOfItems, {host_ptr});
 
-    bufferA.set_final_data(nullptr);
-    bufferB.set_final_data(nullptr);
+    BufferA.set_final_data(nullptr);
+    BufferB.set_final_data(nullptr);
 
     auto &DeviceQueue = Queue();
 
     auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
-      auto A = bufferA.template get_access<sycl_read>(Cgh);
-      auto B = bufferB.template get_access<sycl_read>(Cgh);
-      auto C = bufferC.template get_access<sycl_write>(Cgh);
+      auto A = BufferA.template get_access<sycl_read>(Cgh);
+      auto B = BufferB.template get_access<sycl_read>(Cgh);
+      auto C = BufferC.template get_access<sycl_write>(Cgh);
 
       auto kern = [A, B, C](cl::sycl::id<1> wiID) {
         C[wiID] = A[wiID] + B[wiID];
@@ -60,14 +60,14 @@ public:
 
     // host-side test that one vadd iteration is correct
 #ifdef VERIFY
-    auto A = bufferA.template get_access<sycl_read>();
-    auto B = bufferB.template get_access<sycl_read>();
-    auto C = bufferC.template get_access<sycl_read>();
+    auto A = BufferA.template get_access<sycl_read>();
+    auto B = BufferB.template get_access<sycl_read>();
+    auto C = BufferC.template get_access<sycl_read>();
 
-    for (int i = 0; i < Sz; ++i)
-      if (C[i] != A[i] + B[i]) {
-        std::cerr << "At index: " << i << ". ";
-        std::cerr << C[i] << " != " << A[i] + B[i] << "\n";
+    for (int I = 0; I < Sz; ++I)
+      if (C[I] != A[I] + B[I]) {
+        std::cerr << "At index: " << I << ". ";
+        std::cerr << C[I] << " != " << A[I] + B[I] << "\n";
         abort();
       }
 #endif

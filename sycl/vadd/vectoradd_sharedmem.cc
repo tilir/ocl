@@ -33,13 +33,13 @@ public:
     auto &DeviceQueue = Queue();
 
 #ifdef HOST_ALLOC
-    int *A = cl::sycl::malloc_host<T>(Sz, DeviceQueue);
-    int *B = cl::sycl::malloc_host<T>(Sz, DeviceQueue);
-    int *C = cl::sycl::malloc_host<T>(Sz, DeviceQueue);
+    auto *A = cl::sycl::malloc_host<T>(Sz, DeviceQueue);
+    auto *B = cl::sycl::malloc_host<T>(Sz, DeviceQueue);
+    auto *C = cl::sycl::malloc_host<T>(Sz, DeviceQueue);
 #else
-    int *A = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
-    int *B = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
-    int *C = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
+    auto *A = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
+    auto *B = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
+    auto *C = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
 #endif
 
     std::copy(AVec, AVec + Sz, A);

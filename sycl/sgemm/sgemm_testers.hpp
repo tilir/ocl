@@ -6,7 +6,7 @@
 // Macros to control things:
 //  * inherited from testers.hpp: RUNHOST, INORD...
 //  -DMEASURE_NORMAL : measure with normal host code
-//  -DMULT_TRANSPOSE : in host code, transpose matrix first for cache effects
+//  -DMULT_INEFF : in host code, not transpose matrix first for cache effects
 //
 // Options to control things:
 // -ax=<n>, -ay=<m>, -by=<k> : matrix sizes
@@ -39,10 +39,11 @@
 
 #include "testers.hpp"
 
-constexpr int DEF_AX = 256 * 5;
-constexpr int DEF_AY = 256 * 4;
-constexpr int DEF_BY = 256 * 3;
-constexpr int DEF_LSZ = 1;
+constexpr int DEF_BLOCK = 256;
+constexpr int DEF_AX = 5;
+constexpr int DEF_AY = 4;
+constexpr int DEF_BY = 3;
+constexpr int DEF_LSZ = 8;
 
 namespace sycltesters {
 
@@ -92,7 +93,7 @@ public:
   MatrixMultHost(cl::sycl::queue &DeviceQueue) : MatrixMult<T>(DeviceQueue) {}
   EvtRet_t operator()(const T *A, const T *B, T *C, size_t AX, size_t AY,
                       size_t BY) override {
-#ifdef MULT_TRANSPOSE
+#if !defined(MULT_INEFF)
     mmult_transpose(A, B, C, AX, AY, BY);
 #else
     mmult_normal(A, B, C, AX, AY, BY);
@@ -156,14 +157,19 @@ template <typename MMChildT> void test_sequence(int argc, char **argv) {
   std::cout << "Welcome to matrix multiplication" << std::endl;
 
   try {
-    size_t Ax, Ay, By;
+    size_t Ax, Ay, By, Block;
     unsigned Lsz;
 
     optparser_t OptParser;
-    OptParser.template add<int>("ax", DEF_AX, "size X of matrix A in A * B");
-    OptParser.template add<int>("ay", DEF_AY, "size Y of matrix A in A * B");
-    OptParser.template add<int>("by", DEF_BY, "size Y of matrix B in A * B");
+    OptParser.template add<int>(
+        "ax", DEF_AX, "size X of matrix A in A * B in bsz-element blocks");
+    OptParser.template add<int>(
+        "ay", DEF_AY, "size Y of matrix A in A * B in bsz-element blocks");
+    OptParser.template add<int>(
+        "by", DEF_BY, "size Y of matrix B in A * B in bsz-element blocks");
     OptParser.template add<int>("lsz", DEF_LSZ, "local size");
+    OptParser.template add<int>("bsz", DEF_BLOCK,
+                                "size of block (matrix size multiple)");
 #ifdef MEASURE_NORMAL
     OptParser.template add<int>("vis", 0, "pass 1 to visualize matrices");
 #endif
@@ -173,11 +179,17 @@ template <typename MMChildT> void test_sequence(int argc, char **argv) {
     Ay = OptParser.template get<int>("ay");
     By = OptParser.template get<int>("by");
     Lsz = OptParser.template get<int>("lsz");
+    Block = OptParser.template get<int>("bsz");
 #ifdef MEASURE_NORMAL
     int Vis = OptParser.template get<int>("vis");
 #endif
 
+    Ax = Ax * Block;
+    Ay = Ay * Block;
+    By = By * Block;
+
     std::cout << "Using sizes: " << Ax << ", " << Ay << ", " << By << std::endl;
+    std::cout << "Block size: " << Block << std::endl;
     std::cout << "Local size: " << Lsz << std::endl;
 #ifdef MEASURE_NORMAL
     if (Vis)

@@ -1,6 +1,6 @@
 //------------------------------------------------------------------------------
 //
-// Matrix multiplication with local memory kernel (SYCL vs serial CPU)
+// Matrix multiplication with explicit parallel for workitem
 //
 //------------------------------------------------------------------------------
 //

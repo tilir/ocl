@@ -51,8 +51,8 @@ public:
       auto C = BufferC.template get_access<sycl_write>(Cgh);
 
       auto Kernmul = [A, B, C, AY](cl::sycl::id<2> WorkItem) {
-        int Row = WorkItem.get(0);
-        int Col = WorkItem.get(1);
+        const int Row = WorkItem.get(0);
+        const int Col = WorkItem.get(1);
 
 #ifdef NOPRIVATE
         for (int K = 0; K < AY; K++)
@@ -65,8 +65,7 @@ public:
 #endif
       };
 
-      Cgh.parallel_for<class mmult_naive_buf<T>>(cl::sycl::range<2>{AX, BY},
-                                                 Kernmul);
+      Cgh.parallel_for<class mmult_naive_buf<T>>(Csz, Kernmul);
     });
 
     ProfInfo.push_back(Evt);

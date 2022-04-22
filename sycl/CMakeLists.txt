@@ -68,14 +68,17 @@ include(cmake/buildv.cmake)
 add_library(testers-frame INTERFACE)
 target_include_directories(testers-frame INTERFACE framework)
 
-# vadd related experiments
+# vector additions
 add_subdirectory(vadd)
 
-# bitnoic sort related
+# bitnoic sorts
 add_subdirectory(bitonic)
 
 # matrix multiplications
 add_subdirectory(sgemm)
+
+# histograms
+add_subdirectory(histogram)
 
 # dump folder for shader dumps if any
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/dumps)

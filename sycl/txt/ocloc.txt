@@ -1,0 +1,17 @@
+--- Useful SYCL-related things ---
+
+set SYCL_PI_TRACE=0
+set SYCL_DUMP_IMAGES=1
+
+set SYCL_PRINT_EXECUTION_GRAPH=after_addHostAcc
+
+--- Ocloc stuff ---
+
+set IGC_ShaderDumpEnable=1
+set IGC_DumpToCurrentDir=1
+ocloc compile -device tgllp -spirv_input -file sycl_spir641.spv
+ocloc disasm -file sycl_spir641_Gen12LPlp.bin
+
+--- VTune, etc ---
+
+vtune -collect gpu-hotspots vadd\vectoradd.exe

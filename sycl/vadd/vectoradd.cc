@@ -49,14 +49,13 @@ public:
       auto B = BufferB.template get_access<sycl_read>(Cgh);
       auto C = BufferC.template get_access<sycl_write>(Cgh);
 
-      auto kern = [A, B, C](cl::sycl::id<1> wiID) {
+      auto Kern = [A, B, C](cl::sycl::id<1> wiID) {
         C[wiID] = A[wiID] + B[wiID];
       };
-      Cgh.parallel_for<class vector_add_buf<T>>(NumOfItems, kern);
+      Cgh.parallel_for<class vector_add_buf<T>>(NumOfItems, Kern);
     });
 
     ProfInfo.push_back(Evt);
-    Evt.wait();
 
     // host-side test that one vadd iteration is correct
 #ifdef VERIFY
@@ -68,9 +67,9 @@ public:
       if (C[I] != A[I] + B[I]) {
         std::cerr << "At index: " << I << ". ";
         std::cerr << C[I] << " != " << A[I] + B[I] << "\n";
-        abort();
+        std::terminate();
       }
-#endif
+#endif // VERIFY
     return ProfInfo;
   }
 };

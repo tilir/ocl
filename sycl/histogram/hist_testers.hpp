@@ -32,7 +32,6 @@
 
 #include <CL/sycl.hpp>
 
-// problems with boost in OneAPI console on Windows
 #ifdef USE_BOOST_OPTPARSE
 #include "optparse.hpp"
 #else
@@ -41,6 +40,7 @@
 
 #include "testers.hpp"
 
+// we will need global and local atomic references
 template <typename T>
 using local_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
     T, cl::sycl::memory_order::relaxed, cl::sycl::memory_scope::work_group,
@@ -53,12 +53,6 @@ using global_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
 
 namespace sycltesters {
 
-// -bsz=<bsz> : block size (like 256)
-// -sz=<sz> : data size (in bsz-units)
-// -hsz=<hsz> : number of buckets
-// -gsz=<g> : global iteration space (in bsz-units)
-// -lsz=<l> : local iteration space
-// -vis=1 : visualize hist (use wisely) available only in measure_normal
 constexpr int DEF_BSZ = 256;
 constexpr int DEF_SZ = 2;
 constexpr int DEF_HSZ = 32;

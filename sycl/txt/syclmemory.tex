@@ -61,40 +61,73 @@ inputencoding=utf8,
 
 SYCL is a single-source programming model. This poses a problem. Normaly in heterogeneous systems, there are a diverse variety of memory types (we'll see some of them later). On the other hand, in C++ all memory is the same. So the main problem for single-source system is to find a way to somehow map one upto another.
 
-Central ideas here are ideas of \textbf{buffer} and \textbf{accessor}
+Central ideas in this mapping are ideas of \textbf{buffer} and \textbf{accessor}. Roughly saying buffer represents GPU memory and accessor gives us a way to work with GPU memory from C++.
 
 We will illustrate this with very basic example, which adds two vectors.
 
-Lets abbreviate things (SYCL often allows really long namespace chains).
+\begin{lstlisting}[caption={Vector addition with SYCL buffers},label={lst:vectoradd}]
+// T const *AVec is host pointer to vector A
+// the same for BVec and CVec
+// size_t Sz is vector size
 
-\begin{lstlisting}
-constexpr auto host_ptr = 
-    cl::sycl::property::buffer::use_host_ptr{};
+cl::sycl::range<1> NumOfItems{Sz};
+cl::sycl::buffer<T, 1> BufferA(AVec, NumOfItems, {host_ptr});
+cl::sycl::buffer<T, 1> BufferB(BVec, NumOfItems, {host_ptr});
+cl::sycl::buffer<T, 1> BufferC(CVec, NumOfItems, {host_ptr});
+
+// making calculation on GPU
+DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
+  auto A = BufferA.template get_access<sycl_read>(Cgh);
+  auto B = BufferB.template get_access<sycl_read>(Cgh);
+  auto C = BufferC.template get_access<sycl_write>(Cgh);
+
+  auto Kern = [A, B, C](cl::sycl::id<1> wiID) {
+    C[wiID] = A[wiID] + B[wiID];
+  };
+  Cgh.parallel_for<class vector_add_buf<T>>(NumOfItems, Kern);
+});
+
+// checking with host calculations
+auto A = BufferA.template get_access<sycl_read>();
+auto B = BufferB.template get_access<sycl_read>();
+auto C = BufferC.template get_access<sycl_read>();
+
+for (int I = 0; I < Sz; ++I)
+  if (C[I] != A[I] + B[I]) {
+    std::cerr << "At index: " << I << ". ";
+    std::cerr << C[I] << " != " << A[I] + B[I] << "\n";
+    std::terminate();
+  }
 \end{lstlisting}
 
-This is buffer attribute, showing, that buffer have underlying host pointer. Next buffer creation is really not hard.
+Here things are somewhat abbreviated (SYCL often requires really long namespace chains).
 
 \begin{lstlisting}
-// T const *AVec is host pointer to vector A
-// size_t Sz is vector size
+// buffer attribute
+constexpr auto host_ptr = 
+    cl::sycl::property::buffer::use_host_ptr{};
+
+// accessor types
+constexpr auto sycl_read = cl::sycl::access::mode::read;
+constexpr auto sycl_write = cl::sycl::access::mode::write;
+\end{lstlisting}
+
+This is buffer attribute, showing, that buffer have underlying host pointer. Also we have accessor type abbreviations for read-only and write-only things.
+
+Next we create buffer, which is sort of handle to GPU memory. On creation we explicitly tell which part of CPU memory to take and send to GPU.
+
+\begin{lstlisting}
 cl::sycl::range<1> NumOfItems{Sz};
 cl::sycl::buffer<T, 1> bufferA(AVec, NumOfItems, {host_ptr});
 \end{lstlisting}
 
-We are specifying host pointer, range, and leaving everything else to SYCL API. Now our buffer have its representative in the SYCL world. It will manage data send back and forth if required. If we do not want it to write back after kernel is done, we can block writeback explicitly.
+We are specifying host pointer, range, and leaving everything else to SYCL API. Now our buffer have its representative in the SYCL world. It will manage data and send it back and forth if required. If we do not want it to write back after kernel is done, we can block writeback explicitly.
 
 \begin{lstlisting}
 BufferA.set_final_data(nullptr);
 \end{lstlisting}
 
-Inside command group handler we also will need two simple abbreviations for reead-only and write-only things.
-
-\begin{lstlisting}
-constexpr auto sycl_read = cl::sycl::access::mode::read;
-constexpr auto sycl_write = cl::sycl::access::mode::write;
-\end{lstlisting}
-
-And now lets get an \textbf{accessor} A. Accessors are C++ objects, acting as pointers to the corresponding address space. There is no notion of address space in C++, so we need this abstract layer to fill the gap.
+Now we are getting an \textbf{accessor} A. Accessors are C++ objects, acting as pointers to the corresponding address space. There is no notion of address space in C++, so we need this abstract layer to fill the gap.
 
 \begin{lstlisting}
 auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
@@ -105,13 +138,13 @@ auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
 Which kind of memory are pointed-to by this accessor? Inside \lstinline!cl::sycl::buffer!, method \lstinline!get_access! returns accessor to global memory only. That is why now we will limit ourselves only with different flavors of global memory. For other memory kinds, see (\ref{subsec:PrivLocal}) and later. Inside offload working with such accessor, indexed by SYCL id is much like working with host pointer, indexed by integral value.
 
 \begin{lstlisting}
-auto kern = [A, B, C](cl::sycl::id<1> wiID) {
+auto Kern = [A, B, C](cl::sycl::id<1> wiID) {
   C[wiID] = A[wiID] + B[wiID];
 };
-Cgh.parallel_for<class vector_add_buf<T>>(NumOfItems, kern);
+Cgh.parallel_for<class vector_add_buf<T>>(NumOfItems, Kern);
 \end{lstlisting}
 
-At first glance this looks slightly over compilated? Yes, it should. For some reasons we need:
+At first glance this looks slightly overcomplicated? Yes, it should. For some reasons we need:
 
 \begin{itemize}
 \item Create buffer from host pointer. Capture this buffer to device queue submit.
@@ -136,16 +169,18 @@ Is it the only way? Can we do things different? Lets start investigating...
 
 \begin{figure}
 \centering
-\includegraphics[width=0.8\textwidth]{pictures/sycl-device-and-shared-mem.pdf}
+\includegraphics[width=1.0\textwidth]{pictures/sycl-device-and-shared-mem.pdf}
 \caption{SYCL device and shared memory}
 \label{fig:sycl-device-and-shared-mem}
 \end{figure}
 
-Figure (\ref{fig:sycl-device-and-shared-mem}) represents our first, rather naive mental model of host, device and shared memory. You may think that GPU have its own memory onboard, and CPU does as well. So when you are working with buffers as we did in examples to (\ref{sec:Basics}), you explicitly instruct SYCL runtime when to move memory from CPU to GPU and when to read results back.
+Figure (\ref{fig:sycl-device-and-shared-mem}) represents our first, rather naive mental model of host, device and shared memory. You may think that GPU have its own memory onboard, and CPU does as well. So when you are working with buffers as we did in example to (\ref{sec:Basics}), you explicitly instruct SYCL runtime when to move memory from CPU to GPU and when to read results back.
 
-Other way to write vector add is to write it using shared memory.
+SYCL runtime also builds implicit task graph, based on accessors and schedules tasks, honoring access dependencies. This is not really about memory, so lets pass this topic for now.
 
-\begin{lstlisting}
+Other way to write vector add is to write it using \textbf{shared memory}.
+
+\begin{lstlisting}[caption={Vector addition in shared memory},label={lst:vectoraddshared}]
 auto *A = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
 auto *B = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
 auto *C = cl::sycl::malloc_shared<T>(Sz, DeviceQueue);
@@ -165,11 +200,54 @@ std::copy(C, C + Sz, CVec);
 
 In this case you are not telling device queue to create buffers or accessors. Instead you just order to put everything in shared memory and let hardware to synchronize this memory in the background.
 
+% TODO: gnuplot data from bitonic sort example
+
 \subsection{Private, local and global memory}\label{subsec:PrivLocal}
 
 % 1. SYCL accessors: global and local
 % 2. Glorious GEMM example 
 % 3. Private memory for explicit workgroup
+
+Any modern GPU (at least those, produced by NVidia, AMD and Intel) have notion of shared local memory and private memory. In abstract model of SYCL this is simple: we have work-items and each work-item have small amount of private memory. Work-items are combined in work-groups, each item within work-group have shared access to bigger amount of local memory and finally all work-items have shared access to global memory as represented on fig. (\ref{fig:sycl-privatemem}).
+
+\begin{figure}
+\centering
+\includegraphics[width=1.0\textwidth]{pictures/sycl-privatemem.pdf}
+\caption{SYCL global, local and private memory}
+\label{fig:sycl-privatemem}
+\end{figure}
+
+In this sense, shared virtual memory is also (logically) a kind of global memory, since it is accessible to all work-items.
+
+Basic example on how provate memory affects performance is GEMM example.
+
+\begin{lstlisting}[caption={Naive GEMM with private memory},label={lst:gemmprivate}]
+auto A = BufferA.template get_access<sycl_read>(Cgh);
+auto B = BufferB.template get_access<sycl_read>(Cgh);
+auto C = BufferC.template get_access<sycl_write>(Cgh);
+
+auto Kernmul = [A, B, C, AY](cl::sycl::id<2> WorkItem) {
+  const int Row = WorkItem.get(0);
+  const int Col = WorkItem.get(1);
+
+#ifdef NOPRIVATE
+  for (int K = 0; K < AY; K++)
+    C[Row][Col] += A[Row][K] * B[K][Col];
+#else
+  // this variable is workitem-private
+  T Sum = 0;
+  for (int K = 0; K < AY; K++)
+    Sum += A[Row][K] * B[K][Col];
+  C[Row][Col] = Sum;
+#endif
+};
+
+Cgh.parallel_for<class mmult_naive_buf<T>>(Csz, Kernmul);
+\end{lstlisting}
+
+Here we are doing most naive matrix multiplication possible. Still results on TGLLP with and without private variable are dramatically different.
+
+% TODO: gnuplot data on results
 
 \section{GPU hardware and how to think about memory}\label{sec:GPUHW}
 

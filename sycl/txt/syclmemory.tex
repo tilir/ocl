@@ -252,7 +252,6 @@ auto Kernmul = [A, B, C, AY](cl::sycl::id<2> WorkItem) {
   C[Row][Col] = Sum;
 #endif
 };
-
 Cgh.parallel_for<class mmult_naive_buf<T>>(Csz, Kernmul);
 \end{lstlisting}
 
@@ -267,13 +266,140 @@ Here we are doing most naive matrix multiplication possible. Still results on TG
 
 Of course, usage of local memory for matrix multiplication improves things even more. To use it, we need local accessor, which represents something like pointer to local memory.
 
-%TODO: local memory listing and results
+Main idea for listing (lst. \ref{lst:gemmlocal}) is to have a little chunk of the local memory (like 16 x 16 array). Then we tile matrix into small submatrices. Loop over tiles updates private sum for each tile. After we are done, sum becomes correct and is written to global memory.
 
-Another interesting feature of SYCL programming is explicit workgroup parallelism.
+Critical new idea here is idea of \textbf{barrier}. Barrier acts like semaphore: it stops thread and resume it after all threads will reach the barrier. In this case we are waiting for all threads in the work group.
 
-%TODO: explicit workgroup parallel
+\begin{lstlisting}[caption={GEMM with local and private memory},label={lst:gemmlocal}]
+auto A = BufferA.template get_access<sycl_read>(Cgh);
+auto B = BufferB.template get_access<sycl_read>(Cgh);
+auto C = BufferC.template get_access<sycl_write>(Cgh);
 
-We might note, that this kind of parallelism requires private memory accessor.
+// local memory
+using LTy = cl::sycl::accessor<T, 2, sycl_read_write, sycl_local>;
+LTy Asub{BlockSize, Cgh}, Bsub{BlockSize, Cgh};
+
+auto KernMul = [=](cl::sycl::nd_item<2> It) {
+  int Row = It.get_local_id(0);
+  int Col = It.get_local_id(1);
+  int GlobalRow = LSZ * It.get_group(0) + Row;
+  int GlobalCol = LSZ * It.get_group(1) + Col;
+  int NumTiles = AY / LSZ;
+
+  T Sum = 0;
+  for (int Tile = 0; Tile < NumTiles; Tile++) {
+    int TiledRow = LSZ * Tile + Row;
+    int TiledCol = LSZ * Tile + Col;
+    Asub[Row][Col] = A[GlobalRow][TiledCol];
+    Bsub[Row][Col] = B[TiledRow][GlobalCol];
+    // waiting for all threads to fill Asub[Row][Col]
+    It.barrier(sycl_local_fence);
+    for (int K = 0; K < LSZ; K++)
+      Sum += Asub[Row][K] * Bsub[K][Col];
+    // waiting for all threads to use Asub[Row][Col]
+    It.barrier(sycl_local_fence);
+  }
+  C[GlobalRow][GlobalCol] = Sum;
+};
+Cgh.parallel_for<class mmult_local_buf<T>>(Range, KernMul);
+\end{lstlisting}
+
+We may plot results of local memory usage on the same graph (fig. \ref{fig:plot-priv-vs-nopriv-gemm-tgllp}). We may see one more tremendous improvement.
+
+\begin{figure}
+\centering
+\includegraphics[width=1.0\textwidth]{pictures/plot-gemm-tgllp.pdf}
+\caption{TGLLP (Iris Xe) results for local and private memory usage for GEMM}
+\label{fig:plot-gemm-tgllp}
+\end{figure}
+
+Downside of explicit local memory usage is requirement for user to manually control barriers. Another interesting feature of SYCL programming is explicit hierarchical parallelism.
+
+\begin{lstlisting}[caption={Idea of hierarchial parallelism},label={lst:gemmhiernaive}]
+auto KernMul = [=](cl::sycl::group<2> Group) {
+  Group.parallel_for_work_item([&](cl::sycl::h_item<2> It) {
+    int GlobalRow = It.get_global_id(0);
+    int GlobalCol = It.get_global_id(1);
+    C[GlobalRow][GlobalCol] = 0;
+  });
+....
+};
+Cgh.parallel_for_work_group<class mmult_groups<T>>(
+  NumGroups, BlockSize, KernMul);
+\end{lstlisting}
+
+Simplest idea represented on (lst. \ref{lst:gemmhiernaive}). This listing starts kernel as parallel for work group and then inside this submission runs parallel for work item. We are relying on implicit barriers between work item submissions.
+
+We might note, that this kind of parallelism requires private memory accessor. In old way, when we used ND range, we could just have variable inside \lstinline!parallel_for! and that's all. Now things are more complicated: any private variable may live in the scope of \lstinline!parallel_for_workitem! submission only. But in order to set value of result in the end, we need some private variable, visible to any of submissions.
+
+\begin{lstlisting}[caption={Hierarchial GEMM with private memory},label={lst:gemmhier}]
+auto A = BufferA.template get_access<sycl_read>(Cgh);
+auto B = BufferB.template get_access<sycl_read>(Cgh);
+auto C = BufferC.template get_access<sycl_write>(Cgh);
+
+cl::sycl::range<2> NumGroups{AX / LSZ, BY / LSZ};
+cl::sycl::range<2> BlockSize{LSZ, LSZ};
+const int NumTiles = AY / LSZ;
+
+// local memory
+using LTy = cl::sycl::accessor<T, 2, sycl_read_write, sycl_local>;
+LTy Asub{BlockSize, Cgh}, Bsub{BlockSize, Cgh};
+
+auto KernMul = [=](cl::sycl::group<2> Group) {
+  cl::sycl::private_memory<int, 2> Sum(Group);
+
+  Group.parallel_for_work_item(
+      [&](cl::sycl::h_item<2> It) { Sum(It) = 0; });
+
+  for (int Tile = 0; Tile < NumTiles; Tile++) {
+    Group.parallel_for_work_item([&](cl::sycl::h_item<2> It) {
+      int GlobalRow = It.get_global_id(0);
+      int GlobalCol = It.get_global_id(1);
+      int Row = It.get_local_id(0);
+      int Col = It.get_local_id(1);
+      int TiledRow = LSZ * Tile + Row;
+      int TiledCol = LSZ * Tile + Col;
+
+      Asub[Row][Col] = A[GlobalRow][TiledCol];
+      Bsub[Row][Col] = B[TiledRow][GlobalCol];
+    });
+
+    // rely on automatic barrier
+
+    Group.parallel_for_work_item([&](cl::sycl::h_item<2> It) {
+      int Row = It.get_local_id(0);
+      int Col = It.get_local_id(1);
+
+      for (int K = 0; K < LSZ; K++)
+        Sum(It) += Asub[Row][K] * Bsub[K][Col];
+    });
+
+    // rely on automatic barrier
+  }
+
+  // now assign sum to its cell
+  Group.parallel_for_work_item([&](cl::sycl::h_item<2> It) {
+    int GlobalRow = It.get_global_id(0);
+    int GlobalCol = It.get_global_id(1);
+    C[GlobalRow][GlobalCol] = Sum(It);
+  });
+};
+
+Cgh.parallel_for_work_group<class mmult_groups_priv<T>>(
+    NumGroups, BlockSize, KernMul);
+\end{lstlisting}
+
+To see example of private memory accessor you may want to look at (lst. \ref{lst:gemmhier}). Here we do have \lstinline!Sum! variable, declared as:
+
+\begin{lstlisting}
+cl::sycl::private_memory<int, 2> Sum(Group);
+\end{lstlisting}
+
+We can use it anywhere, accumulate things and finally use it to assign value to the output buffer in the global memory.
+
+So logically we do have three kinds of memory (also we do have global constant one, let's forget it for now). Is it all we need to know?
+
+Lets continue diving deeper...
 
 \section{GPU hardware and how to think about memory}\label{sec:GPUHW}
 

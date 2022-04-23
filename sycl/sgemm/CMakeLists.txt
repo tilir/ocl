@@ -2,6 +2,7 @@ set(KERNELS
   matmult
   matmult_local
   matmult_groups
+  matmult_groups_priv
 )
 
 # common includes and libs

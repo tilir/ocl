@@ -55,10 +55,8 @@ public:
       auto C = BufferC.template get_access<sycl_write>(Cgh);
 
       // local memory
-      cl::sycl::accessor<T, 2, sycl_read_write, sycl_local> Asub(BlockSize,
-                                                                 Cgh);
-      cl::sycl::accessor<T, 2, sycl_read_write, sycl_local> Bsub(BlockSize,
-                                                                 Cgh);
+      using LTy = cl::sycl::accessor<T, 2, sycl_read_write, sycl_local>;
+      LTy Asub{BlockSize, Cgh}, Bsub{BlockSize, Cgh};
 
       auto KernMul = [=](cl::sycl::nd_item<2> It) {
         int Row = It.get_local_id(0);
@@ -68,19 +66,19 @@ public:
         int NumTiles = AY / LSZ;
 
         T Sum = 0;
-
         for (int Tile = 0; Tile < NumTiles; Tile++) {
           int TiledRow = LSZ * Tile + Row;
           int TiledCol = LSZ * Tile + Col;
           Asub[Row][Col] = A[GlobalRow][TiledCol];
           Bsub[Row][Col] = B[TiledRow][GlobalCol];
 #ifndef NOBARRIER
+          // waiting for all threads to fill Asub[Row][Col]
           It.barrier(sycl_local_fence);
 #endif
-
           for (int K = 0; K < LSZ; K++)
             Sum += Asub[Row][K] * Bsub[K][Col];
 #ifndef NOBARRIER
+          // waiting for all threads to use Asub[Row][Col]
           It.barrier(sycl_local_fence);
 #endif
         }

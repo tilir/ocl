@@ -214,7 +214,8 @@ template <typename MMChildT> void test_sequence(int argc, char **argv) {
     if (!Quiet)
       std::cout << "Welcome to matrix multiplication" << std::endl;
     auto Q = set_queue();
-    print_info(std::cout, Q.get_device());
+    if (!Cfg.Quiet)
+      print_info(std::cout, Q.get_device());
 
     if (!Cfg.Quiet)
       std::cout << "Initializing" << std::endl;

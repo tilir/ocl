@@ -1,6 +1,7 @@
 //------------------------------------------------------------------------------
 //
 // Matrix multiplication with explicit parallel for workitem
+// Also using private memory here to speed up things
 //
 //------------------------------------------------------------------------------
 //
@@ -18,7 +19,7 @@
 #include "sgemm_testers.hpp"
 
 // class is used for kernel name
-template <typename T> class mmult_groups;
+template <typename T> class mmult_groups_priv;
 
 template <typename T>
 class MatrixMultGroups : public sycltesters::MatrixMult<T> {
@@ -54,15 +55,13 @@ public:
 
       // local memory
       using LTy = cl::sycl::accessor<T, 2, sycl_read_write, sycl_local>;
-      LTy Asub(BlockSize, Cgh);
-      LTy Bsub(BlockSize, Cgh);
+      LTy Asub{BlockSize, Cgh}, Bsub{BlockSize, Cgh};
 
       auto KernMul = [=](cl::sycl::group<2> Group) {
-        Group.parallel_for_work_item([&](cl::sycl::h_item<2> It) {
-          int GlobalRow = It.get_global_id(0);
-          int GlobalCol = It.get_global_id(1);
-          C[GlobalRow][GlobalCol] = 0;
-        });
+        cl::sycl::private_memory<int, 2> Sum(Group);
+
+        Group.parallel_for_work_item(
+            [&](cl::sycl::h_item<2> It) { Sum(It) = 0; });
 
         for (int Tile = 0; Tile < NumTiles; Tile++) {
           Group.parallel_for_work_item([&](cl::sycl::h_item<2> It) {
@@ -80,21 +79,26 @@ public:
           // rely on automatic barrier
 
           Group.parallel_for_work_item([&](cl::sycl::h_item<2> It) {
-            int GlobalRow = It.get_global_id(0);
-            int GlobalCol = It.get_global_id(1);
             int Row = It.get_local_id(0);
             int Col = It.get_local_id(1);
 
             for (int K = 0; K < LSZ; K++)
-              C[GlobalRow][GlobalCol] += Asub[Row][K] * Bsub[K][Col];
+              Sum(It) += Asub[Row][K] * Bsub[K][Col];
           });
 
           // rely on automatic barrier
         }
+
+        // now assign sum to its cell
+        Group.parallel_for_work_item([&](cl::sycl::h_item<2> It) {
+          int GlobalRow = It.get_global_id(0);
+          int GlobalCol = It.get_global_id(1);
+          C[GlobalRow][GlobalCol] = Sum(It);
+        });
       };
 
-      Cgh.parallel_for_work_group<class mmult_groups<T>>(NumGroups, BlockSize,
-                                                         KernMul);
+      Cgh.parallel_for_work_group<class mmult_groups_priv<T>>(
+          NumGroups, BlockSize, KernMul);
     });
     ProfInfo.push_back(Evt);
     Evt.wait();

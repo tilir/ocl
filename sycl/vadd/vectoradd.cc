@@ -4,7 +4,7 @@
 // no explicit sync required
 //
 // Windows OneAPI console
-// build: dpcpp -EHsc -std=c++20 -fsycl vectoradd.cc
+// build: dpcpp -EHsc -O2 -std=c++20 -fsycl -Iframework -Ivadd vadd\vectoradd.cc
 // run: vectoradd.exe -size=20000 -nreps=2000
 //
 //------------------------------------------------------------------------------

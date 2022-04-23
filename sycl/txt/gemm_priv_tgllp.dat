@@ -1,0 +1,8 @@
+# run with
+# > gnuplot -persist -c gemm_priv_tgllp.dat
+
+# set title "Usage of private memory on TGLLP (simple gemm kernel)"
+set grid
+set xlabel "AX size (given AY is 2048 and BY is 1536)"
+set ylabel "time (seconds)"
+plot 'data/priv-tgllp.dat' with linespoints title 'Accumulator in private memory', 'data/nopriv-tgllp.dat' with linespoints t 'Private memory not used'

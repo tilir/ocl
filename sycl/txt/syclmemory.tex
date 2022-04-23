@@ -200,7 +200,7 @@ std::copy(C, C + Sz, CVec);
 
 In this case you are not telling device queue to create buffers or accessors. Instead you just order to put everything in shared memory and let hardware to synchronize this memory in the background.
 
-% TODO: gnuplot data from bitonic sort example
+% TODO: gnuplot data from bitonic sort example? Need to think about it...
 
 \subsection{Private, local and global memory}\label{subsec:PrivLocal}
 
@@ -208,7 +208,7 @@ In this case you are not telling device queue to create buffers or accessors. In
 % 2. Glorious GEMM example 
 % 3. Private memory for explicit workgroup
 
-Any modern GPU (at least those, produced by NVidia, AMD and Intel) have notion of shared local memory and private memory. In abstract model of SYCL this is simple: we have work-items and each work-item have small amount of private memory. Work-items are combined in work-groups, each item within work-group have shared access to bigger amount of local memory and finally all work-items have shared access to global memory as represented on fig. (\ref{fig:sycl-privatemem}).
+Any modern GPU (at least those, produced by NVidia, AMD and Intel) have notion of shared local memory and private memory. In abstract model of SYCL this is simple: we have work-items and each work-item have small amount of private memory. Work-items are combined in work-groups, each item within work-group have shared access to bigger amount of local memory and finally all work-items have shared access to global memory as represented on (fig. \ref{fig:sycl-privatemem}).
 
 \begin{figure}
 \centering
@@ -219,7 +219,18 @@ Any modern GPU (at least those, produced by NVidia, AMD and Intel) have notion o
 
 In this sense, shared virtual memory is also (logically) a kind of global memory, since it is accessible to all work-items.
 
-Basic example on how provate memory affects performance is GEMM example.
+Basic example on how private memory affects performance is GEMM example.
+
+In matrix multiplication iteration space is a cell of the resulting matrix, so each workitem as shown on (fig. \ref{fig:iter-space-matrix}) basically does dot product of vectors and then accumulate results. 
+
+\begin{figure}
+\centering
+\includegraphics[width=1.0\textwidth]{pictures/iter-space-matrix.pdf}
+\caption{SYCL global, local and private memory}
+\label{fig:iter-space-matrix}
+\end{figure}
+
+As a first approach we can come up with simple program from (lst. \ref{lst:gemmprivate}). 
 
 \begin{lstlisting}[caption={Naive GEMM with private memory},label={lst:gemmprivate}]
 auto A = BufferA.template get_access<sycl_read>(Cgh);
@@ -245,9 +256,24 @@ auto Kernmul = [A, B, C, AY](cl::sycl::id<2> WorkItem) {
 Cgh.parallel_for<class mmult_naive_buf<T>>(Csz, Kernmul);
 \end{lstlisting}
 
-Here we are doing most naive matrix multiplication possible. Still results on TGLLP with and without private variable are dramatically different.
+Here we are doing most naive matrix multiplication possible. Still results on TGLLP with and without private variable are dramatically different, see (fig. \ref{fig:plot-priv-vs-nopriv-gemm-tgllp}).
 
-% TODO: gnuplot data on results
+\begin{figure}
+\centering
+\includegraphics[width=1.0\textwidth]{pictures/plot-priv-vs-nopriv-gemm-tgllp.pdf}
+\caption{TGLLP (Iris Xe) results for private memory usage for kernel from (lst. \ref{lst:gemmprivate})}
+\label{fig:plot-priv-vs-nopriv-gemm-tgllp}
+\end{figure}
+
+Of course, usage of local memory for matrix multiplication improves things even more. To use it, we need local accessor, which represents something like pointer to local memory.
+
+%TODO: local memory listing and results
+
+Another interesting feature of SYCL programming is explicit workgroup parallelism.
+
+%TODO: explicit workgroup parallel
+
+We might note, that this kind of parallelism requires private memory accessor.
 
 \section{GPU hardware and how to think about memory}\label{sec:GPUHW}
 

@@ -12,6 +12,7 @@
 // -ax=<n>, -ay=<m>, -by=<k> : matrix sizes
 // -lsz=<l> : amount of local address space
 // -vis=1 : visualize matrices (use wisely) available only in measure_normal
+// -q=1 : quiet mode (say for gnuplot stuff), output only GPU time or errors
 //
 //------------------------------------------------------------------------------
 //
@@ -46,6 +47,58 @@ constexpr int DEF_BY = 3;
 constexpr int DEF_LSZ = 8;
 
 namespace sycltesters {
+
+namespace sgemm {
+struct Config {
+  size_t Ax, Ay, By, Block;
+  unsigned Lsz;
+  int Vis = 0, Quiet;
+};
+
+inline Config read_config(int argc, char **argv) {
+  Config Cfg;
+
+  optparser_t OptParser;
+  OptParser.template add<int>(
+      "ax", DEF_AX, "size X of matrix A in A * B in bsz-element blocks");
+  OptParser.template add<int>(
+      "ay", DEF_AY, "size Y of matrix A in A * B in bsz-element blocks");
+  OptParser.template add<int>(
+      "by", DEF_BY, "size Y of matrix B in A * B in bsz-element blocks");
+  OptParser.template add<int>("lsz", DEF_LSZ, "local size");
+  OptParser.template add<int>("bsz", DEF_BLOCK,
+                              "size of block (matrix size multiple)");
+  OptParser.template add<int>("vis", 0, "pass 1 to visualize matrices");
+  OptParser.template add<int>("q", 0, "pass 1 for quiet mode");
+  OptParser.parse(argc, argv);
+
+  Cfg.Block = OptParser.template get<int>("bsz");
+  Cfg.Ax = OptParser.template get<int>("ax") * Cfg.Block;
+  Cfg.Ay = OptParser.template get<int>("ay") * Cfg.Block;
+  Cfg.By = OptParser.template get<int>("by") * Cfg.Block;
+  Cfg.Lsz = OptParser.template get<int>("lsz");
+  Cfg.Quiet = OptParser.template get<int>("q");
+
+#ifdef MEASURE_NORMAL
+  Cfg.Vis = OptParser.template get<int>("vis");
+#endif
+  if (Cfg.Quiet && Cfg.Vis) {
+    std::cout << "Please select quiet or visual" << std::endl;
+    std::terminate();
+  }
+
+  if (!Cfg.Quiet) {
+    if (Cfg.Vis)
+      std::cout << "Visual mode" << std::endl;
+    std::cout << "Using sizes: " << Cfg.Ax << ", " << Cfg.Ay << ", " << Cfg.By
+              << std::endl;
+    std::cout << "Block size: " << Cfg.Block << std::endl;
+    std::cout << "Local size: " << Cfg.Lsz << std::endl;
+  }
+
+  return Cfg;
+}
+} // namespace sgemm
 
 template <typename T> class MatrixMult {
   cl::sycl::queue DeviceQueue_;
@@ -154,95 +207,74 @@ void rand_initialize(T *Arr, size_t Sz, int min, int max) {
 }
 
 template <typename MMChildT> void test_sequence(int argc, char **argv) {
-  std::cout << "Welcome to matrix multiplication" << std::endl;
-
+  bool Quiet;
   try {
-    size_t Ax, Ay, By, Block;
-    unsigned Lsz;
-
-    optparser_t OptParser;
-    OptParser.template add<int>(
-        "ax", DEF_AX, "size X of matrix A in A * B in bsz-element blocks");
-    OptParser.template add<int>(
-        "ay", DEF_AY, "size Y of matrix A in A * B in bsz-element blocks");
-    OptParser.template add<int>(
-        "by", DEF_BY, "size Y of matrix B in A * B in bsz-element blocks");
-    OptParser.template add<int>("lsz", DEF_LSZ, "local size");
-    OptParser.template add<int>("bsz", DEF_BLOCK,
-                                "size of block (matrix size multiple)");
-#ifdef MEASURE_NORMAL
-    OptParser.template add<int>("vis", 0, "pass 1 to visualize matrices");
-#endif
-    OptParser.parse(argc, argv);
-
-    Ax = OptParser.template get<int>("ax");
-    Ay = OptParser.template get<int>("ay");
-    By = OptParser.template get<int>("by");
-    Lsz = OptParser.template get<int>("lsz");
-    Block = OptParser.template get<int>("bsz");
-#ifdef MEASURE_NORMAL
-    int Vis = OptParser.template get<int>("vis");
-#endif
-
-    Ax = Ax * Block;
-    Ay = Ay * Block;
-    By = By * Block;
-
-    std::cout << "Using sizes: " << Ax << ", " << Ay << ", " << By << std::endl;
-    std::cout << "Block size: " << Block << std::endl;
-    std::cout << "Local size: " << Lsz << std::endl;
-#ifdef MEASURE_NORMAL
-    if (Vis)
-      std::cout << "Visual mode" << std::endl;
-#endif
-
+    auto Cfg = sgemm::read_config(argc, argv);
+    Quiet = Cfg.Quiet;
+    if (!Quiet)
+      std::cout << "Welcome to matrix multiplication" << std::endl;
     auto Q = set_queue();
     print_info(std::cout, Q.get_device());
 
-    std::cout << "Initializing" << std::endl;
+    if (!Cfg.Quiet)
+      std::cout << "Initializing" << std::endl;
     using Ty = typename MMChildT::type;
-    std::vector<Ty> A(Ax * Ay), B(Ay * By);
+    std::vector<Ty> A(Cfg.Ax * Cfg.Ay), B(Cfg.Ay * Cfg.By);
     rand_initialize(A.data(), A.size(), MINF, MAXF);
     rand_initialize(B.data(), B.size(), MINF, MAXF);
 
 #ifdef MEASURE_NORMAL
-    std::cout << "Calculating host" << std::endl;
+    if (!Quiet)
+      std::cout << "Calculating host" << std::endl;
     MatrixMultHost<Ty> MMultH{Q}; // Q unused for this derived class
-    MatrixMultTester<Ty> TesterH{MMultH, A.data(), B.data(), Ax, Ay, By};
+    MatrixMultTester<Ty> TesterH{MMultH, A.data(), B.data(),
+                                 Cfg.Ax, Cfg.Ay,   Cfg.By};
     auto ElapsedH = TesterH.calculate();
-    std::cout << "Measured host time: " << ElapsedH.first << std::endl;
+    if (!Quiet)
+      std::cout << "Measured host time: " << ElapsedH.first << std::endl;
 #endif
 
-    MMChildT MMult{Q, Lsz};
+    MMChildT MMult{Q, Cfg.Lsz};
 
-    MatrixMultTester<Ty> Tester{MMult, A.data(), B.data(), Ax, Ay, By};
+    MatrixMultTester<Ty> Tester{MMult,  A.data(), B.data(),
+                                Cfg.Ax, Cfg.Ay,   Cfg.By};
 
-    std::cout << "Calculating gpu" << std::endl;
+    if (!Quiet)
+      std::cout << "Calculating gpu" << std::endl;
     auto Elapsed = Tester.calculate();
 
-    std::cout << "Measured time: " << Elapsed.first / 1000.0 << std::endl;
-    std::cout << "Pure execution time: " << Elapsed.second / 1000000000.0
-              << std::endl;
+    if (!Quiet) {
+      std::cout << "Measured time: " << Elapsed.first / 1000.0 << std::endl;
+      std::cout << "Pure execution time: " << Elapsed.second / 1000000000.0
+                << std::endl;
+    } else {
+      // only things that shall occur on console in quiet mode: Ax and time
+      // we may run this in the loop
+      std::cout << Cfg.Ax << " " << Elapsed.first / 1000.0 << std::endl;
+    }
 
-#ifdef MEASURE_NORMAL
-    // verification with host result
+#if defined(MEASURE_NORMAL) || defined(VERIFY)
     Ty *HostData = TesterH.getref();
     Ty *GPUData = Tester.getref();
 
-    if (Vis) {
-      dump_matrix(std::cout, "A", Tester.getA(), Ax, Ay);
-      dump_matrix(std::cout, "B", Tester.getB(), Ay, By);
-      dump_matrix(std::cout, "Host result", HostData, Ax, By);
-      dump_matrix(std::cout, "GPU result", GPUData, Ax, By);
+    if (Cfg.Vis) {
+      assert(!Quiet);
+      dump_matrix(std::cout, "A", Tester.getA(), Cfg.Ax, Cfg.Ay);
+      dump_matrix(std::cout, "B", Tester.getB(), Cfg.Ay, Cfg.By);
+      dump_matrix(std::cout, "Host result", HostData, Cfg.Ax, Cfg.By);
+      dump_matrix(std::cout, "GPU result", GPUData, Cfg.Ax, Cfg.By);
     }
 
-    for (int I = 0; I < Ax * By; ++I)
+#if defined(VERIFY)
+    // verification with host result
+    for (int I = 0; I < Cfg.Ax * Cfg.By; ++I)
       if (HostData[I] != GPUData[I]) {
-        std::cout << "Mismatch at: " << I << std::endl;
-        std::cout << HostData[I] << " vs " << GPUData[I] << std::endl;
-        return;
+        std::cerr << "Mismatch at: " << I << std::endl;
+        std::cerr << HostData[I] << " vs " << GPUData[I] << std::endl;
+        std::terminate();
       }
-#endif
+#endif // VERIFY
+#endif // MEASURE_NORMAL || VERIFY
   } catch (cl::sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
     abort();
@@ -253,7 +285,8 @@ template <typename MMChildT> void test_sequence(int argc, char **argv) {
     std::cerr << "Unknown error\n";
     abort();
   }
-  std::cout << "Everything is correct" << std::endl;
+  if (!Quiet)
+    std::cout << "Everything is correct" << std::endl;
 }
 
 } // namespace sycltesters

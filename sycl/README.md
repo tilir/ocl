@@ -9,6 +9,7 @@
   * vadd for vector add and friends
   * sgemm for matrix multiplications
   * bitonic for bitonic sorts
+  * histogram for different histograms
 
 ### Config & build
 

@@ -24,13 +24,21 @@
 
 #include <CL/sycl.hpp>
 
-// convenient sycl mode synonyms
+// convenient sycl access mode synonyms
 constexpr auto sycl_read = cl::sycl::access::mode::read;
 constexpr auto sycl_write = cl::sycl::access::mode::write;
 constexpr auto sycl_read_write = cl::sycl::access::mode::read_write;
+constexpr auto sycl_atomic = cl::sycl::access::mode::atomic;
+
+// local target and gence aliases
 constexpr auto sycl_local = cl::sycl::access::target::local;
 constexpr auto sycl_local_fence = cl::sycl::access::fence_space::local_space;
+
+// convenient buffer property aliases
 constexpr auto host_ptr = cl::sycl::property::buffer::use_host_ptr{};
+
+static const double msec_per_sec = 1000.0;
+static const double nsec_per_sec = 1000000000.0;
 
 // convenient namspaces
 namespace esimd = sycl::ext::intel::experimental::esimd;

@@ -1,5 +1,6 @@
 set(KERNELS
   hist_naive
+  hist_naive_acc
 )
 
 # build kernels

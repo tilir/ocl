@@ -1,5 +1,5 @@
 clang-format version 10.0.0-4ubuntu1
-find -name "*.hpp" -o -name "*.cc" -exec clang-format -i {} \;
+find \( -name "*.cc" -o -name "*.hpp" \) -exec clang-format -i {} \;
 
 Windows build, OneAPI console:
 cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release ..

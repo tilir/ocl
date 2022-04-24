@@ -1,7 +1,8 @@
 //------------------------------------------------------------------------------
 //
-// Vector addition, SYCL way, with malloc_device
-// We may set depends explicitly, so no explicit wait here, except last
+// Vector addition, SYCL way, with malloc_device.
+// We may set depends explicitly, so no explicit wait here, except last.
+// illustrates cgh.memcpy and cgh.depends_on usage.
 //
 //------------------------------------------------------------------------------
 //

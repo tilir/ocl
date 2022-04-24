@@ -8,9 +8,10 @@
 //  -DMEASURE_NORMAL : measure with normal host code
 //
 // Options to control things:
-// -sz=<sz> : data size
-// -hsz=<hsz> : number of buckets (in 256-units)
-// -gsz=<g> : global iteration space (in 256-units)
+// -bsz=<bsz> : block size
+// -sz=<sz> : data size (in bsz-units)
+// -hsz=<hsz> : number of buckets
+// -gsz=<g> : global iteration space (in bsz-units)
 // -lsz=<l> : local iteration space
 // -vis=1 : visualize hist (use wisely) available only in measure_normal
 //
@@ -53,10 +54,10 @@ using global_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
 
 namespace sycltesters {
 
-constexpr int DEF_BSZ = 256;
-constexpr int DEF_SZ = 2;
+constexpr int DEF_BSZ = 1024;
+constexpr int DEF_SZ = 2000;
 constexpr int DEF_HSZ = 32;
-constexpr int DEF_GSZ = 1;
+constexpr int DEF_GSZ = 10;
 constexpr int DEF_LSZ = 8;
 constexpr int DEF_VIS = 0;
 
@@ -189,7 +190,8 @@ template <typename HistChildT> void test_sequence(int argc, char **argv) {
     HistogrammHost<Ty> HistH{Q}; // Q unused for this derived class
     HistogrammTester<Ty> TesterH{HistH, Data.data(), Cfg.Sz, Cfg.HistSz};
     auto ElapsedH = TesterH.calculate();
-    std::cout << "Measured host time: " << ElapsedH.first << std::endl;
+    std::cout << "Measured host time: " << ElapsedH.first / msec_per_sec
+              << std::endl;
 #endif
 
     HistChildT Hist{Q, Cfg.GlobSz, Cfg.LocSz};
@@ -199,8 +201,8 @@ template <typename HistChildT> void test_sequence(int argc, char **argv) {
     std::cout << "Calculating gpu" << std::endl;
     auto Elapsed = Tester.calculate();
 
-    std::cout << "Measured time: " << Elapsed.first / 1000.0 << std::endl;
-    std::cout << "Pure execution time: " << Elapsed.second / 1000000000.0
+    std::cout << "Measured time: " << Elapsed.first / msec_per_sec << std::endl
+              << "Pure execution time: " << Elapsed.second / nsec_per_sec
               << std::endl;
 
 #ifdef MEASURE_NORMAL

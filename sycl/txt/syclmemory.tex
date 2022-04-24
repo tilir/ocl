@@ -406,6 +406,12 @@ Lets continue diving deeper...
 % 1. Programming for GPU means (at least some) knowledge of architecture
 % 2. Bad surprises may happen if you don't (example with too much private memory)
 
+When you are writing code for CPU, you often need first functionality and only then (if any) performance. Say if you have obvious stall on network, or on hard drive access, any performance beyond that might not be feasible at all. So most of CPU programmers don't spend hours fighting for milliseconds, investigating generated assembler and counting cache misses (except maybe HFT and related areas).
+
+Situation reverses when you are doing offload to GPGPU (or to any heterogeneous device). The idea of making offload means you are deliberately seeking for performance. And if you operate in SYCL only inside its logical model, you are doing things blindfold. Something may work, something not. Then you are changing your GPU and something else works, etc.
+
+Problem is: bad surprises may happen without general understanding of what is happening under the hood.
+
 \subsection{Stateless, stateful and local memory}\label{subsec:StatelessFull}
 
 % 1. Idea of binding tables and stateful buffers

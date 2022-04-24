@@ -1,8 +1,9 @@
 //------------------------------------------------------------------------------
 //
 // Matrix multiplication with local memory kernel (SYCL vs serial CPU)
+// Uses shared memory instead of buffers
 //
-// try: matmult_local.exe -lsz=16
+// try: matmult_local_shared.exe -lsz=16
 //
 //------------------------------------------------------------------------------
 //
@@ -37,23 +38,19 @@ public:
     const auto LSZ = Lsz_; // avoid implicit capture of this
     assert((AY % LSZ) == 0);
     std::vector<cl::sycl::event> ProfInfo;
-    cl::sycl::range<2> Asz{AX, AY}, Bsz{AY, BY}, Csz{AX, BY};
-    cl::sycl::buffer<T, 2> BufferA(Aptr, Asz), BufferB(Bptr, Bsz),
-        BufferC(Cptr, Csz);
-
-    BufferA.set_final_data(nullptr);
-    BufferB.set_final_data(nullptr);
-
     auto &DeviceQueue = Queue();
 
+    auto *A = cl::sycl::malloc_shared<T>(AX * AY, DeviceQueue);
+    auto *B = cl::sycl::malloc_shared<T>(AY * BY, DeviceQueue);
+    auto *C = cl::sycl::malloc_shared<T>(AX * BY, DeviceQueue);
+    std::copy(Aptr, Aptr + AX * AY, A);
+    std::copy(Bptr, Bptr + AY * BY, B);
+    std::copy(Cptr, Cptr + AX * BY, C); // zero-out
+
     cl::sycl::range<2> BlockSize{LSZ, LSZ};
-    cl::sycl::nd_range<2> Range{Csz, BlockSize};
+    cl::sycl::nd_range<2> Range{cl::sycl::range<2>{AX, BY}, BlockSize};
 
     auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
-      auto A = BufferA.template get_access<sycl_read>(Cgh);
-      auto B = BufferB.template get_access<sycl_read>(Cgh);
-      auto C = BufferC.template get_access<sycl_write>(Cgh);
-
       // local memory
       using LTy = cl::sycl::accessor<T, 2, sycl_read_write, sycl_local>;
       LTy Asub{BlockSize, Cgh}, Bsub{BlockSize, Cgh};
@@ -69,20 +66,16 @@ public:
         for (int Tile = 0; Tile < NumTiles; Tile++) {
           const int TiledRow = LSZ * Tile + Row;
           const int TiledCol = LSZ * Tile + Col;
-          Asub[Row][Col] = A[GlobalRow][TiledCol];
-          Bsub[Row][Col] = B[TiledRow][GlobalCol];
-#ifndef NOBARRIER
+          Asub[Row][Col] = A[GlobalRow * AY + TiledCol];
+          Bsub[Row][Col] = B[TiledRow * BY + GlobalCol];
           // waiting for all threads to fill Asub[Row][Col]
           It.barrier(sycl_local_fence);
-#endif
           for (int K = 0; K < LSZ; K++)
             Sum += Asub[Row][K] * Bsub[K][Col];
-#ifndef NOBARRIER
           // waiting for all threads to use Asub[Row][Col]
           It.barrier(sycl_local_fence);
-#endif
         }
-        C[GlobalRow][GlobalCol] = Sum;
+        C[GlobalRow * BY + GlobalCol] = Sum;
       };
 
       Cgh.parallel_for<class mmult_local_buf<T>>(Range, KernMul);
@@ -91,6 +84,11 @@ public:
     ProfInfo.push_back(Evt);
     Evt.wait();
 
+    // copy back
+    std::copy(C, C + AX * BY, Cptr);
+    cl::sycl::free(A, DeviceQueue);
+    cl::sycl::free(B, DeviceQueue);
+    cl::sycl::free(C, DeviceQueue);
     return ProfInfo;
   }
 };

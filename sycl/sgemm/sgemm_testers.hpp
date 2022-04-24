@@ -232,7 +232,8 @@ template <typename MMChildT> void test_sequence(int argc, char **argv) {
                                  Cfg.Ax, Cfg.Ay,   Cfg.By};
     auto ElapsedH = TesterH.calculate();
     if (!Quiet)
-      std::cout << "Measured host time: " << ElapsedH.first << std::endl;
+      std::cout << "Measured host time: " << ElapsedH.first / msec_per_sec
+                << std::endl;
 #endif
 
     MMChildT MMult{Q, Cfg.Lsz};
@@ -245,13 +246,14 @@ template <typename MMChildT> void test_sequence(int argc, char **argv) {
     auto Elapsed = Tester.calculate();
 
     if (!Quiet) {
-      std::cout << "Measured time: " << Elapsed.first / 1000.0 << std::endl;
-      std::cout << "Pure execution time: " << Elapsed.second / 1000000000.0
+      std::cout << "Measured time: " << Elapsed.first / msec_per_sec
+                << std::endl
+                << "Pure execution time: " << Elapsed.second / nsec_per_sec
                 << std::endl;
     } else {
       // only things that shall occur on console in quiet mode: Ax and time
       // we may run this in the loop
-      std::cout << Cfg.Ax << " " << Elapsed.first / 1000.0 << std::endl;
+      std::cout << Cfg.Ax << " " << Elapsed.first / msec_per_sec << std::endl;
     }
 
 #if defined(MEASURE_NORMAL) || defined(VERIFY)

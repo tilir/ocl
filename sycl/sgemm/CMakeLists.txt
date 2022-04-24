@@ -1,6 +1,7 @@
-set(KERNELS  
+set(KERNELS
   matmult
   matmult_local
+  matmult_local_shared
   matmult_groups
   matmult_groups_priv
 )

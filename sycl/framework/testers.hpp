@@ -4,7 +4,6 @@
 // Avoiding tons of boilerplate otherwise
 //
 // Macros to control things:
-//  -DRUNHOST        : run as a host code (debugging, etc)
 //  -DINORD          : use inorder queues
 //
 //------------------------------------------------------------------------------
@@ -110,14 +109,9 @@ inline cl::sycl::queue set_queue() {
       cl::sycl::property::queue::enable_profiling()};
 #endif
 
-#ifdef RUNHOST
-  cl::sycl::host_selector Hsel;
-  cl::sycl::queue Q{Hsel, Exception_handler, PropList};
-#else
-  cl::sycl::gpu_selector GPsel;
-  cl::sycl::queue Q{GPsel, Exception_handler, PropList};
-#endif
-
+  // use env "SYCL_DEVICE_FILTER=cpu" to run on host
+  cl::sycl::default_selector Sel;
+  cl::sycl::queue Q{Sel, Exception_handler, PropList};
   return Q;
 }
 

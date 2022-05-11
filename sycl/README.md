@@ -4,12 +4,13 @@
 
 * cmake for cmake modules
 * framework for common utilities
-* txt for textual notes
 * named folders for different kernels
   * vadd for vector add and friends
   * sgemm for matrix multiplications
   * bitonic for bitonic sorts
   * histogram for different histograms
+* scripts for ruby and gnuplot scripts
+* txt for textual notes
 
 ### Config & build
 

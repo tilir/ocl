@@ -27,7 +27,7 @@ if(USE_BOOST)
 endif()
   target_link_libraries(${KERNEL} testers-frame)
 
-# under WIN32 OneAPI ditribution have Release driver, so no dumps possible through env
+# under WIN32 OneAPI distribution have Release driver, so no dumps possible through env
 if(NOT WIN32)
   file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/dumps/${KERNEL})
   add_test(NAME ${KERNEL}_run

@@ -35,6 +35,12 @@ if(USE_BOOST)
 set(Boost_USE_MULTITHREADED ON)
 endif()
 
+set(USE_MKL TRUE)
+
+if(USE_MKL)
+find_package(MKL CONFIG REQUIRED)
+endif()
+
 # Ugliest hack possible for stable Windows builds
 # Idea is: we do not have regular linker syntax:
 # 'dpcpp target.obj /link <linker args>' works, but 'dpcpp target.obj <linker args>' not.

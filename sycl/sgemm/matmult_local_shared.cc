@@ -21,7 +21,7 @@
 #include "sgemm_testers.hpp"
 
 // class is used for kernel name
-template <typename T> class mmult_local_buf;
+template <typename T> class mmult_local_shared_buf;
 
 template <typename T>
 class MatrixMultLocalBuf : public sycltesters::MatrixMult<T> {
@@ -78,7 +78,7 @@ public:
         C[GlobalRow * BY + GlobalCol] = Sum;
       };
 
-      Cgh.parallel_for<class mmult_local_buf<T>>(Range, KernMul);
+      Cgh.parallel_for<class mmult_local_shared_buf<T>>(Range, KernMul);
     });
 
     ProfInfo.push_back(Evt);

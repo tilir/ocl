@@ -27,6 +27,7 @@
 
 # for release measurements try:
 # cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DMEASURE_NORMAL=1 -DVERIFY=1 -DCMAKE_BUILD_TYPE=Release ..
+# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release ..
 
 cmake_minimum_required(VERSION 3.15)
 project(syclexamples)

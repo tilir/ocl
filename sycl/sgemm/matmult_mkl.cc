@@ -3,7 +3,7 @@
 // Matrix multiplication with MKL library (SYCL vs serial CPU)
 //
 // Macros to control things:
-// -DNOPRIVATE -- switch off temporary storage in private memory
+// -DMKLTRANS -- use transposed matrix
 //
 //------------------------------------------------------------------------------
 //
@@ -49,7 +49,14 @@ public:
     auto *B = cl::sycl::malloc_shared<T>(AY * BY, DeviceQueue);
     auto *C = cl::sycl::malloc_shared<T>(AX * BY, DeviceQueue);
     std::copy(Aptr, Aptr + AX * AY, A);
+#if !defined(MKLTRANS)
     std::copy(Bptr, Bptr + AY * BY, B);
+#else
+    TransB = oneapi::mkl::transpose::trans;
+    for (int i = 0; i < AY; ++i)
+      for (int j = 0; j < BY; ++j)
+        B[j * AY + i] = Bptr[i * BY + j];
+#endif
     std::copy(Cptr, Cptr + AX * BY, C); // zero-out
 
     auto Evt =

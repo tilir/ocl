@@ -15,9 +15,11 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <iostream>
+#include <iterator>
 #include <random>
 #include <vector>
 
@@ -125,5 +127,13 @@ struct Dice {
     return uid(rng);
   }
 };
+
+template <typename It, typename Os>
+void visualize_seq(It begin, It end, Os &stream) {
+  using T = typename std::iterator_traits<It>::value_type;
+  std::ostream_iterator<T> Out{stream, " "};
+  std::copy(begin, end, Out);
+  stream << "\n";
+}
 
 } // namespace sycltesters

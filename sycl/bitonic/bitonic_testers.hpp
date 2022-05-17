@@ -5,9 +5,8 @@
 //
 // Macros to control things:
 //  * inherited from testers.hpp: RUNHOST, INORD...
-//  -DVISUALIZE         : print out arrays
 //  -DVERIFY            : check for sorted
-//  -DMEASURE_NORMAL    : measure with normal host code
+//  -DMEASURE_NORMAL    : check against CPU sort (default is std::sort)
 //  -DCHECK_BITONIC_CPU : check against bitonic sort CPU code
 //
 //------------------------------------------------------------------------------
@@ -19,10 +18,12 @@
 
 #pragma once
 
+#include <algorithm>
 #include <bit>
 #include <cassert>
 #include <chrono>
 #include <iostream>
+#include <iterator>
 #include <vector>
 
 #include <CL/sycl.hpp>
@@ -41,6 +42,42 @@ constexpr int DEF_BLOCK_SIZE = 1;
 
 namespace sycltesters {
 
+namespace bitonicsort {
+struct Config {
+  unsigned Size, LocalSize;
+  int Vis = 0, Quiet;
+};
+
+inline Config read_config(int argc, char **argv) {
+  Config Cfg;
+  optparser_t OptParser;
+  OptParser.template add<int>(
+      "size", DEF_SIZE, "logarithmic size to sort (1 << size) is real size");
+  OptParser.template add<int>("lsz", DEF_BLOCK_SIZE, "local size");
+  OptParser.template add<int>("vis", 0,
+                              "pass 1 to visualize before and after sort");
+  OptParser.template add<int>("q", 0, "pass 1 for quiet mode");
+  OptParser.parse(argc, argv);
+
+  Cfg.Size = OptParser.template get<int>("size");
+  Cfg.LocalSize = OptParser.template get<int>("lsz");
+  Cfg.Quiet = OptParser.template get<int>("q");
+  Cfg.Vis = OptParser.template get<int>("vis");
+
+  if (Cfg.Size < 2 || Cfg.Size > 31) {
+    std::cerr << "Size is logarithmic, 2 is min, 31 is max" << std::endl;
+    std::terminate();
+  }
+
+  if (Cfg.Quiet && Cfg.Vis) {
+    std::cerr << "Please select quiet or visual" << std::endl;
+    std::terminate();
+  }
+
+  return Cfg;
+}
+} // namespace bitonicsort
+
 template <typename T> class BitonicSort {
   cl::sycl::queue DeviceQueue_;
 
@@ -54,9 +91,7 @@ public:
 };
 
 template <typename T> struct BitonicSortHost : public BitonicSort<T> {
-  int Step, Stage, NSeq, SeqLen, Power2;
-
-  void SwapElements(T *Vec) {
+  void SwapElements(T *Vec, int NSeq, int SeqLen, int Power2) {
     for (int SNum = 0; SNum < NSeq; SNum++) {
       int Odd = SNum / Power2;
       bool Increasing = ((Odd % 2) == 0);
@@ -76,6 +111,7 @@ public:
   BitonicSortHost(cl::sycl::queue &DeviceQueue) : BitonicSort<T>(DeviceQueue) {}
   EvtRet_t operator()(T *Vec, size_t Sz) override {
     assert(Vec);
+    int NSeq, SeqLen, Step, Stage, Power2;
 #if CHECK_BITONIC_CPU
     if (std::popcount(Sz) != 1 || Sz < 2)
       throw std::runtime_error("Please use only power-of-two arrays");
@@ -87,7 +123,7 @@ public:
         NSeq = 1 << (N - Stage - 1);
         SeqLen = 1 << (Stage + 1);
         Power2 = 1 << (Step - Stage);
-        SwapElements(Vec);
+        SwapElements(Vec, NSeq, SeqLen, Power2);
       }
     }
 #else
@@ -109,15 +145,7 @@ public:
 
   void initialize() {
     Dice d(0, Sz_);
-    for (int i = 0; i < Sz_; i++) {
-      A_[i] = d();
-#ifdef VISUALIZE
-      std::cout << A_[i] << " ";
-#endif
-    }
-#ifdef VISUALIZE
-    std::cout << std::endl;
-#endif
+    std::generate(A_.begin(), A_.end(), [&] { return d(); });
   }
 
   std::pair<unsigned, unsigned> calculate() {
@@ -126,74 +154,83 @@ public:
     EvtRet_t Ret = Sorter_(A_.data(), Sz_);
     EvtTiming += getTime(Ret);
     Timer_.stop();
-#ifdef VISUALIZE
-    for (int i = 0; i < Sz_; i++)
-      std::cout << A_[i] << " ";
-    std::cout << std::endl;
-#endif
-#ifdef VERIFY
-    if (!std::is_sorted(A_.begin(), A_.end()))
-      throw std::runtime_error("Sorting failed");
-#endif
     return {Timer_.elapsed(), EvtTiming};
   }
+
+  auto begin() { return A_.begin(); }
+  auto end() { return A_.end(); }
 };
 
 template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
-  std::cout << "Welcome to bitonic sort" << std::endl;
-
+  bool Quiet;
   try {
-    unsigned Size, LocalSize;
-
-    optparser_t OptParser;
-    OptParser.template add<int>(
-        "size", DEF_SIZE, "logarithmic size to sort (1 << size) is real size");
-    OptParser.template add<int>("lsz", DEF_BLOCK_SIZE, "local size");
-    OptParser.parse(argc, argv);
-
-    Size = OptParser.template get<int>("size");
-    LocalSize = OptParser.template get<int>("lsz");
-
-    if (Size < 2 || Size > 31)
-      throw std::runtime_error("Size is logarithmic, 1 is min, 31 is max");
-
-    std::cout << "Using vector size = " << (1 << Size) << std::endl;
-
+    auto Cfg = bitonicsort::read_config(argc, argv);
+    Quiet = Cfg.Quiet;
     auto Q = set_queue();
-    print_info(std::cout, Q.get_device());
+    if (!Quiet) {
+      std::cout << "Welcome to bitonic sort" << std::endl;
+      std::cout << "Using vector size = " << (1 << Cfg.Size) << std::endl;
+      print_info(std::cout, Q.get_device());
+    }
 
     using Ty = typename BitonicChildT::type;
 #ifdef MEASURE_NORMAL
     BitonicSortHost<Ty> BitonicSortH{Q}; // Q unused for this derived class
-    BitonicSortTester<Ty> TesterH{BitonicSortH, 1u << Size};
+    BitonicSortTester<Ty> TesterH{BitonicSortH, 1u << Cfg.Size};
     TesterH.initialize();
     auto ElapsedH = TesterH.calculate();
-    std::cout << "Measured host time: " << ElapsedH.first << std::endl;
+    if (!Quiet)
+      std::cout << "Measured host time: " << ElapsedH.first << std::endl;
 #endif
 
-    BitonicChildT BitonicSort{Q, LocalSize};
-    BitonicSortTester<Ty> Tester{BitonicSort, 1u << Size};
+    BitonicChildT BitonicSort{Q, Cfg.LocalSize};
+    BitonicSortTester<Ty> Tester{BitonicSort, 1u << Cfg.Size};
 
-    std::cout << "Initializing" << std::endl;
+    if (!Quiet)
+      std::cout << "Initializing" << std::endl;
     Tester.initialize();
 
-    std::cout << "Calculating" << std::endl;
+    if (Cfg.Vis) {
+      std::cout << "Before sort:" << std::endl;
+      visualize_seq(Tester.begin(), Tester.end(), std::cout);
+    }
+
+    if (!Quiet)
+      std::cout << "Calculating" << std::endl;
     auto Elapsed = Tester.calculate();
 
-    std::cout << "Measured time: " << Elapsed.first / 1000.0 << std::endl;
-    std::cout << "Pure execution time: " << Elapsed.second / 1000000000.0
-              << std::endl;
+    if (Cfg.Vis) {
+      std::cout << "After sort:" << std::endl;
+      visualize_seq(Tester.begin(), Tester.end(), std::cout);
+    }
+
+#ifdef VERIFY
+    if (!std::is_sorted(A_.begin(), A_.end())) {
+      std::cerr << "Sorting failed" << std::endl;
+      std::terminate();
+    }
+#endif
+
+    if (!Quiet) {
+      std::cout << "Measured time: " << Elapsed.first / msec_per_sec
+                << std::endl;
+      std::cout << "Pure execution time: " << Elapsed.second / nsec_per_sec
+                << std::endl;
+    } else {
+      std::cout << Cfg.Size << " " << Elapsed.first / msec_per_sec << std::endl;
+    }
   } catch (cl::sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
-    abort();
+    std::terminate();
   } catch (std::exception const &err) {
     std::cerr << "Exception: " << err.what() << "\n";
-    abort();
+    std::terminate();
   } catch (...) {
     std::cerr << "Unknown error\n";
-    abort();
+    std::terminate();
   }
-  std::cout << "Everything is correct" << std::endl;
+  if (!Quiet)
+    std::cout << "Everything is correct" << std::endl;
 }
 
 } // namespace sycltesters

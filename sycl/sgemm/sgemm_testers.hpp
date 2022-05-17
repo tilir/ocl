@@ -214,10 +214,10 @@ template <typename MMChildT> void test_sequence(int argc, char **argv) {
     if (!Quiet)
       std::cout << "Welcome to matrix multiplication" << std::endl;
     auto Q = set_queue();
-    if (!Cfg.Quiet)
+    if (!Quiet)
       print_info(std::cout, Q.get_device());
 
-    if (!Cfg.Quiet)
+    if (!Quiet)
       std::cout << "Initializing" << std::endl;
     using Ty = typename MMChildT::type;
     std::vector<Ty> A(Cfg.Ax * Cfg.Ay), B(Cfg.Ay * Cfg.By);

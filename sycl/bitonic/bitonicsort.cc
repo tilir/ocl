@@ -3,6 +3,9 @@
 // Bitonic sort, SYCL way, with explicit buffers
 // no explicit sync required
 //
+// Macros to control things:
+// -DSIMPLERANGE : use simple range instead of ND-range
+//
 //------------------------------------------------------------------------------
 //
 // This file is licensed after LGPL v3
@@ -45,15 +48,21 @@ public:
         int SeqLen = 1 << (Stage + 1);
         int Power2 = 1 << (Step - Stage);
         cl::sycl::range<1> NumOfItems{Sz};
+#if !defined(SIMPLERANGE)
         cl::sycl::range<1> BlockSize{Lsz_};
         cl::sycl::nd_range<1> Range{NumOfItems, BlockSize};
+#endif
 
         // Offload the work to kernel.
         auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
           auto AVec = ABuf.template get_access<sycl_read_write>(Cgh);
 
+#if !defined(SIMPLERANGE)
           auto Kernsort = [=](cl::sycl::nd_item<1> Item) {
             int I = Item.get_global_id(0);
+#else
+          auto Kernsort = [=](cl::sycl::id<1> I) {
+#endif
             int SeqNum = I / SeqLen;
             int Odd = SeqNum / Power2;
             bool Increasing = ((Odd % 2) == 0);
@@ -70,10 +79,14 @@ public:
             }
           };
 
+#if !defined(SIMPLERANGE)
           Cgh.parallel_for<class bitonic_sort_buf<T>>(Range, Kernsort);
+#else
+          Cgh.parallel_for<class bitonic_sort_buf<T>>(NumOfItems, Kernsort);
+#endif
         });
         ProfInfo.push_back(Evt);
-        Evt.wait();
+        // no need for Evt.wait(), implicit dep graph will do the job
       }
     }
     return ProfInfo;

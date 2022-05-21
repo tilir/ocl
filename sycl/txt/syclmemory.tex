@@ -198,9 +198,7 @@ DeviceQueue.wait();
 std::copy(C, C + Sz, CVec);
 \end{lstlisting}
 
-In this case you are not telling device queue to create buffers or accessors. Instead you just order to put everything in shared memory and let hardware to synchronize this memory in the background.
-
-% TODO: gnuplot data from bitonic sort example? Need to think about it...
+In this case you are not telling device queue to create buffers or accessors. Instead you just order to put everything in shared memory and let hardware to send this memory back and force in the background. Note you then need to synchronize everything manually or use in-order queues -- you can not rely anymore on implicit accessor dependency graph.
 
 \subsection{Private, local and global memory}\label{subsec:PrivLocal}
 

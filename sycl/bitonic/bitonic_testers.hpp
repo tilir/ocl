@@ -205,7 +205,7 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
     }
 
 #ifdef VERIFY
-    if (!std::is_sorted(A_.begin(), A_.end())) {
+    if (!std::is_sorted(Tester.begin(), Tester.end())) {
       std::cerr << "Sorting failed" << std::endl;
       std::terminate();
     }

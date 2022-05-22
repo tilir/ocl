@@ -38,8 +38,10 @@ constexpr auto sycl_local_fence = cl::sycl::access::fence_space::local_space;
 // convenient buffer property aliases
 constexpr auto host_ptr = cl::sycl::property::buffer::use_host_ptr{};
 
+// milliseconds, microsecond and nanoseconds
 static const double msec_per_sec = 1000.0;
-static const double nsec_per_sec = 1000000000.0;
+static const double usec_per_sec = msec_per_sec * msec_per_sec;
+static const double nsec_per_sec = msec_per_sec * msec_per_sec * msec_per_sec;
 
 // convenient namspaces
 namespace esimd = sycl::ext::intel::experimental::esimd;
@@ -48,35 +50,35 @@ namespace chrono = std::chrono;
 namespace sycltesters {
 
 class Timer {
-  chrono::high_resolution_clock::time_point start_, fin_;
-  bool started_ = false;
+  chrono::high_resolution_clock::time_point Start, Fin;
+  bool Started = false;
 
 public:
   Timer() = default;
   void start() {
-    assert(!started_);
-    started_ = true;
-    start_ = chrono::high_resolution_clock::now();
+    assert(!Started);
+    Started = true;
+    Start = chrono::high_resolution_clock::now();
   }
   void stop() {
-    assert(started_);
-    started_ = false;
-    fin_ = chrono::high_resolution_clock::now();
+    assert(Started);
+    Started = false;
+    Fin = chrono::high_resolution_clock::now();
   }
   unsigned elapsed() {
-    assert(!started_);
-    auto elps = fin_ - start_;
-    auto msec = chrono::duration_cast<chrono::milliseconds>(elps);
-    return msec.count();
+    assert(!Started);
+    auto Elps = Fin - Start;
+    auto Msec = chrono::duration_cast<chrono::milliseconds>(Elps);
+    return Msec.count();
   }
 };
 
-inline std::ostream &print_info(std::ostream &os, cl::sycl::device d) {
-  os << d.template get_info<cl::sycl::info::device::name>() << "\n";
-  os << "Driver version: "
-     << d.template get_info<cl::sycl::info::device::driver_version>() << "\n";
-  os << d.template get_info<cl::sycl::info::device::opencl_c_version>() << "\n";
-  return os;
+inline std::ostream &print_info(std::ostream &Os, cl::sycl::device D) {
+  Os << D.template get_info<cl::sycl::info::device::name>() << "\n";
+  Os << "Driver version: "
+     << D.template get_info<cl::sycl::info::device::driver_version>() << "\n";
+  Os << D.template get_info<cl::sycl::info::device::opencl_c_version>() << "\n";
+  return Os;
 }
 
 using EvtRet_t = std::optional<std::vector<cl::sycl::event>>;
@@ -118,22 +120,28 @@ inline cl::sycl::queue set_queue() {
 }
 
 struct Dice {
-  std::uniform_int_distribution<int> uid;
+  std::uniform_int_distribution<int> Uid;
 
-  Dice(int min, int max) : uid(min, max) {}
-  int operator()() {
-    static std::random_device rd;
-    static std::mt19937 rng{rd()};
-    return uid(rng);
+  Dice(int Min, int Max) : Uid(Min, Max) {}
+  int operator()() const {
+    static std::random_device Rd;
+    static std::mt19937 Rng{Rd()};
+    return Uid(Rng);
   }
 };
 
+template <typename It>
+void rand_initialize(It Begin, It End, int Min, int Max) {
+  Dice D(Min, Max);
+  std::generate(Begin, End, [&] { return D(); });
+}
+
 template <typename It, typename Os>
-void visualize_seq(It begin, It end, Os &stream) {
-  using T = typename std::iterator_traits<It>::value_type;
-  std::ostream_iterator<T> Out{stream, " "};
-  std::copy(begin, end, Out);
-  stream << "\n";
+void visualize_seq(It Begin, It End, Os &Stream) {
+  using Ty = typename std::iterator_traits<It>::value_type;
+  std::ostream_iterator<Ty> Out{Stream, " "};
+  std::copy(Begin, End, Out);
+  Stream << "\n";
 }
 
 } // namespace sycltesters

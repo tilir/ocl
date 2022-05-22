@@ -17,9 +17,15 @@
 #include "CImg.h"
 // clang-format on
 
+namespace drawer {
+
+static const unsigned char red[] = {255, 0, 0};
+static const unsigned char green[] = {0, 255, 0};
+static const unsigned char blue[] = {0, 0, 255};
+
 template <typename T>
-inline void disp_buffer(cimg_library::CImgDisplay &draw_disp, T *buf, int bufw,
-                        int bufh, const unsigned char *cl) {
+void disp_buffer(cimg_library::CImgDisplay &draw_disp, T *buf, int bufw,
+                 int bufh, const unsigned char *cl) {
   double ddw = draw_disp.width();
   double ddh = draw_disp.height();
   double hmult = ddh / bufh;
@@ -33,3 +39,5 @@ inline void disp_buffer(cimg_library::CImgDisplay &draw_disp, T *buf, int bufw,
   }
   img.display(draw_disp);
 }
+
+} // namespace drawer

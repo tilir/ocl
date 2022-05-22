@@ -59,17 +59,18 @@ using global_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
 
 namespace sycltesters {
 
-constexpr int DEF_BSZ = 256;
+constexpr int DEF_BSZ = 128;
 constexpr int DEF_SZ = 1024; // data size in blocks
-constexpr int DEF_HSZ = 64;
-constexpr int DEF_GSZ = 256; // global iteration space in blocks
+constexpr int DEF_HSZ = 260;
+constexpr int DEF_GSZ = 64; // global iteration space in blocks
 constexpr int DEF_LSZ = 32;
+constexpr int DEF_BWIDTH = 2;
 constexpr int DEF_VIS = 0;
 
 namespace hist {
 
 struct Config {
-  int Block, Sz, HistSz, GlobSz, LocSz, Vis;
+  int Block, Sz, HistSz, GlobSz, LocSz, Vis, BWidth;
   std::string Image;
 };
 
@@ -86,6 +87,8 @@ inline Config read_config(int argc, char **argv) {
   OptParser.template add<int>("vis", 0, "pass 1 to visualize matrices");
   OptParser.template add<std::string>("img", "",
                                       "pass image path to load image");
+  OptParser.template add<int>("bwidth", DEF_BWIDTH,
+                              "bin width for hist visualization");
   OptParser.parse(argc, argv);
 
   Cfg.Image = OptParser.template get<std::string>("img");
@@ -95,6 +98,7 @@ inline Config read_config(int argc, char **argv) {
   Cfg.GlobSz = OptParser.template get<int>("gsz") * Cfg.Block;
   Cfg.LocSz = OptParser.template get<int>("lsz");
   Cfg.Vis = OptParser.template get<int>("vis");
+  Cfg.BWidth = OptParser.template get<int>("bwidth");
 
   if (Cfg.Block < 1 || Cfg.Sz < 1 || Cfg.HistSz < 1 || Cfg.GlobSz < 1 ||
       Cfg.LocSz < 1) {
@@ -167,8 +171,11 @@ public:
     return {Timer_.elapsed(), EvtTiming};
   }
 
-  const T *getData() const { return Data_; }
-  T *getref() { return Bins_.data(); }
+  const T *data() const { return Data_; }
+  auto dataBins() { return Bins_.data(); }
+  auto sizeBins() { return Bins_.size(); }
+  auto beginBins() { return Bins_.begin(); }
+  auto endBins() { return Bins_.end(); }
 };
 
 template <typename T>
@@ -179,14 +186,9 @@ void dump_hist(std::ostream &Os, std::string Name, const T *Data, int Sz) {
   Os << "\n";
 }
 
-template <typename T>
-void rand_initialize(T *Arr, size_t Sz, int Min, int Max) {
-  Dice D(Min, Max);
-  std::generate(Arr, Arr + Sz, [&] { return D(); });
-}
-
 template <typename HistChildT, typename Ty>
-void single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg, Ty *Data) {
+HistogrammTester<Ty> single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
+                                          Ty *Data) {
 #if defined(MEASURE_NORMAL)
   std::cout << "Calculating host" << std::endl;
   HistogrammHost<Ty> HistH{Q}; // Q unused for this derived class
@@ -194,7 +196,7 @@ void single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg, Ty *Data) {
   auto ElapsedH = TesterH.calculate();
   std::cout << "Measured host time: " << ElapsedH.first / msec_per_sec
             << std::endl;
-  Ty *HostData = TesterH.getref();
+  Ty *HostData = TesterH.dataBins();
   if (Cfg.Vis)
     dump_hist(std::cout, "Host result", HostData, Cfg.HistSz);
 #endif
@@ -210,22 +212,67 @@ void single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg, Ty *Data) {
             << "Pure execution time: " << Elapsed.second / nsec_per_sec
             << std::endl;
 
-  Ty *GPUData = Tester.getref();
+  Ty *GPUData = Tester.dataBins();
 
   if (Cfg.Vis) {
-    dump_hist(std::cout, "Data: ", Tester.getData(), Cfg.Sz);
+    dump_hist(std::cout, "Data: ", Tester.data(), Cfg.Sz);
     dump_hist(std::cout, "GPU result", GPUData, Cfg.HistSz);
   }
 
 #if defined(MEASURE_NORMAL) && defined(VERIFY)
   // verification with host result
-  for (int I = 0; I < Cfg.HistSz; ++I)
-    if (HostData[I] != GPUData[I]) {
-      std::cout << "Mismatch at: " << I << std::endl;
-      std::cout << HostData[I] << " vs " << GPUData[I] << std::endl;
-      return;
-    }
+  auto MisPoint = std::mismatch(HostData, HostData + Cfg.HistSz, GPUData);
+  if (MisPoint.first != HostData + Cfg.HistSz) {
+    ptrdiff_t I = MisPoint.first - HostData;
+    std::cout << "Mismatch at: " << I << std::endl;
+    std::cout << *MisPoint.first << " vs " << *MisPoint.second << std::endl;
+    std::terminate();
+  }
 #endif
+  return Tester;
+}
+
+// implemented in terms of single_hist_sequence
+template <typename HistChildT>
+void cimg_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg) {
+  using Ty = typename HistChildT::type;
+  std::cout << "Initializing with image: " << Cfg.Image << std::endl;
+  cimg_library::CImg<unsigned char> Image(Cfg.Image.c_str());
+  Cfg.Sz = Image.width() * Image.height();
+  std::cout << "Overriding size with image size " << Cfg.Sz << std::endl;
+  cimg_library::CImgDisplay MainDisp(Image, "Histogram image source");
+
+  // RGB channels
+  std::vector<Ty> DataR(Image.data(), Image.data() + Cfg.Sz);
+  std::vector<Ty> DataG(Image.data() + Cfg.Sz, Image.data() + 2 * Cfg.Sz);
+  std::vector<Ty> DataB(Image.data() + 2 * Cfg.Sz, Image.data() + 3 * Cfg.Sz);
+  auto TesterR = single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataR.data());
+  auto TesterG = single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataG.data());
+  auto TesterB = single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataB.data());
+
+  auto RMaxIt = std::max_element(TesterR.beginBins(), TesterR.endBins());
+  auto GMaxIt = std::max_element(TesterG.beginBins(), TesterG.endBins());
+  auto BMaxIt = std::max_element(TesterB.beginBins(), TesterB.endBins());
+  if (RMaxIt == TesterR.endBins() || GMaxIt == TesterG.endBins() ||
+      BMaxIt == TesterB.endBins())
+    throw std::runtime_error("Empty bins");
+
+  constexpr int DispHeight = 400;
+  cimg_library::CImgDisplay RDisp(Cfg.HistSz * Cfg.BWidth, DispHeight,
+                                  "Histogram red channel", 0);
+  cimg_library::CImgDisplay GDisp(Cfg.HistSz * Cfg.BWidth, DispHeight,
+                                  "Histogram green channel", 0);
+  cimg_library::CImgDisplay BDisp(Cfg.HistSz * Cfg.BWidth, DispHeight,
+                                  "Histogram blue channel", 0);
+  drawer::disp_buffer(RDisp, TesterR.dataBins(), TesterR.sizeBins(), *RMaxIt,
+                      drawer::red);
+  drawer::disp_buffer(GDisp, TesterG.dataBins(), TesterG.sizeBins(), *GMaxIt,
+                      drawer::green);
+  drawer::disp_buffer(BDisp, TesterB.dataBins(), TesterB.sizeBins(), *BMaxIt,
+                      drawer::blue);
+  while (!MainDisp.is_closed()) {
+    cimg_library::cimg::wait(20);
+  }
 }
 
 template <typename HistChildT> void test_sequence(int argc, char **argv) {
@@ -241,28 +288,11 @@ template <typename HistChildT> void test_sequence(int argc, char **argv) {
       std::vector<Ty> Data;
       std::cout << "Initializing with random" << std::endl;
       Data.resize(Cfg.Sz);
-      rand_initialize(Data.data(), Data.size(), 0, Cfg.HistSz - 1);
+      rand_initialize(Data.begin(), Data.end(), 0, Cfg.HistSz - 1);
       single_hist_sequence<HistChildT>(Q, Cfg, Data.data());
     } else {
 #ifdef CIMG_ENABLE
-      std::cout << "Initializing with image: " << Cfg.Image << std::endl;
-      cimg_library::CImg<unsigned char> Image(Cfg.Image.c_str());
-      Cfg.Sz = Image.width() * Image.height();
-      std::cout << "Overriding size with image size " << Cfg.Sz << std::endl;
-      cimg_library::CImgDisplay MainDisp(Image, "Histogram image source");
-
-      // RGB channels
-      std::vector<Ty> DataR(Image.data(), Image.data() + Cfg.Sz);
-      std::vector<Ty> DataG(Image.data() + Cfg.Sz, Image.data() + 2 * Cfg.Sz);
-      std::vector<Ty> DataB(Image.data() + 2 * Cfg.Sz,
-                            Image.data() + 3 * Cfg.Sz);
-      single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataR.data());
-      single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataG.data());
-      single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataB.data());
-
-      while (!MainDisp.is_closed()) {
-        cimg_library::cimg::wait(20);
-      }
+      cimg_hist_sequence<HistChildT>(Q, Cfg);
 #else
       std::cerr << "Please build with CImg support" << std::endl;
       std::terminate();

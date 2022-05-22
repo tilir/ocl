@@ -14,6 +14,15 @@
 // -gsz=<g> : global iteration space (in bsz-units)
 // -lsz=<l> : local iteration space
 // -vis=1 : visualize hist (use wisely) available only in measure_normal
+// -zero=1 : fill hist with zeroes for debug
+//
+// Special visualization part:
+// -img=path : path to image to build realistics hist
+// -bwidth=<bwidth> : width of columns in visualized hist
+//
+// Try:
+// > hist_naive.exe -sz=16 -bsz=1 -gsz=8 -hsz=4 -lsz=2 -vis=1 -zero=1
+// > hist_naive.exe -img=..\favn.jpg
 //
 //------------------------------------------------------------------------------
 //
@@ -66,11 +75,12 @@ constexpr int DEF_GSZ = 64; // global iteration space in blocks
 constexpr int DEF_LSZ = 32;
 constexpr int DEF_BWIDTH = 2;
 constexpr int DEF_VIS = 0;
+constexpr int DEF_ZEROOUT = 0;
 
 namespace hist {
 
 struct Config {
-  int Block, Sz, HistSz, GlobSz, LocSz, Vis, BWidth;
+  int Block, Sz, HistSz, GlobSz, LocSz, Vis, BWidth, Zero;
   std::string Image;
 };
 
@@ -89,6 +99,7 @@ inline Config read_config(int argc, char **argv) {
                                       "pass image path to load image");
   OptParser.template add<int>("bwidth", DEF_BWIDTH,
                               "bin width for hist visualization");
+  OptParser.template add<int>("zero", DEF_ZEROOUT, "fill with zeroes");
   OptParser.parse(argc, argv);
 
   Cfg.Image = OptParser.template get<std::string>("img");
@@ -99,6 +110,7 @@ inline Config read_config(int argc, char **argv) {
   Cfg.LocSz = OptParser.template get<int>("lsz");
   Cfg.Vis = OptParser.template get<int>("vis");
   Cfg.BWidth = OptParser.template get<int>("bwidth");
+  Cfg.Zero = OptParser.template get<int>("zero");
 
   if (Cfg.Block < 1 || Cfg.Sz < 1 || Cfg.HistSz < 1 || Cfg.GlobSz < 1 ||
       Cfg.LocSz < 1) {
@@ -288,7 +300,10 @@ template <typename HistChildT> void test_sequence(int argc, char **argv) {
       std::vector<Ty> Data;
       std::cout << "Initializing with random" << std::endl;
       Data.resize(Cfg.Sz);
-      rand_initialize(Data.begin(), Data.end(), 0, Cfg.HistSz - 1);
+      if (Cfg.Zero)
+        std::fill(Data.begin(), Data.end(), 0);
+      else
+        rand_initialize(Data.begin(), Data.end(), 0, Cfg.HistSz - 1);
       single_hist_sequence<HistChildT>(Q, Cfg, Data.data());
     } else {
 #ifdef CIMG_ENABLE

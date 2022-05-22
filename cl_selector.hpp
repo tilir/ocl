@@ -22,8 +22,10 @@
 #error "Please compile with C++2a/C++20 for basic_string::starts_with"
 #endif
 
+// clang-format off
 #include "cl_defs.h"
 #include "CL/opencl.hpp"
+// clang-format on
 
 // intended to be private base only => no virtual dtor
 struct ocl_selector_t {
@@ -45,8 +47,8 @@ struct ocl_selector_t {
     }
 
     platform = cl::Platform::getDefault();
-    std::cout << "selected: "
-              << platform.getInfo<CL_PLATFORM_VENDOR>() << std::endl;
+    std::cout << "selected: " << platform.getInfo<CL_PLATFORM_VENDOR>()
+              << std::endl;
 
     platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
     std::cout << "Devices:" << std::endl;
@@ -54,5 +56,3 @@ struct ocl_selector_t {
       std::cout << "\t* " << d.getInfo<CL_DEVICE_NAME>() << std::endl;
   }
 };
-
-

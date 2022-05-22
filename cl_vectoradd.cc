@@ -18,8 +18,10 @@
 #define MYVERSION 120
 #include "cl_selector.hpp"
 
+// clang-format off
 #include "cl_defs.h"
 #include "CL/opencl.hpp"
+// clang-format on
 
 #define STRINGIFY(...) #__VA_ARGS__
 

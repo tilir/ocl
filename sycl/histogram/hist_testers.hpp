@@ -39,6 +39,11 @@
 #include "optparse_alt.hpp"
 #endif
 
+#define CIMG_ENABLE
+
+#ifdef CIMG_ENABLE
+#include "drawer.hpp"
+#endif
 #include "testers.hpp"
 
 // we will need global and local atomic references
@@ -54,16 +59,66 @@ using global_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
 
 namespace sycltesters {
 
-constexpr int DEF_BSZ = 1024;
-constexpr int DEF_SZ = 2000;
-constexpr int DEF_HSZ = 32;
-constexpr int DEF_GSZ = 10;
-constexpr int DEF_LSZ = 8;
+constexpr int DEF_BSZ = 256;
+constexpr int DEF_SZ = 1024; // data size in blocks
+constexpr int DEF_HSZ = 64;
+constexpr int DEF_GSZ = 256; // global iteration space in blocks
+constexpr int DEF_LSZ = 32;
 constexpr int DEF_VIS = 0;
+
+namespace hist {
 
 struct Config {
   int Block, Sz, HistSz, GlobSz, LocSz, Vis;
+  std::string Image;
 };
+
+inline Config read_config(int argc, char **argv) {
+  Config Cfg;
+  optparser_t OptParser;
+  OptParser.template add<int>("bsz", DEF_BSZ, "block size");
+  OptParser.template add<int>("sz", DEF_SZ,
+                              "data size (in bsz-element blocks)");
+  OptParser.template add<int>("hsz", DEF_HSZ, "number of buckets");
+  OptParser.template add<int>("gsz", DEF_GSZ,
+                              "global iteration space (in bsz-element blocks)");
+  OptParser.template add<int>("lsz", DEF_LSZ, "local iteration space");
+  OptParser.template add<int>("vis", 0, "pass 1 to visualize matrices");
+  OptParser.template add<std::string>("img", "",
+                                      "pass image path to load image");
+  OptParser.parse(argc, argv);
+
+  Cfg.Image = OptParser.template get<std::string>("img");
+  Cfg.Block = OptParser.template get<int>("bsz");
+  Cfg.Sz = OptParser.template get<int>("sz") * Cfg.Block;
+  Cfg.HistSz = OptParser.template get<int>("hsz");
+  Cfg.GlobSz = OptParser.template get<int>("gsz") * Cfg.Block;
+  Cfg.LocSz = OptParser.template get<int>("lsz");
+  Cfg.Vis = OptParser.template get<int>("vis");
+
+  if (Cfg.Block < 1 || Cfg.Sz < 1 || Cfg.HistSz < 1 || Cfg.GlobSz < 1 ||
+      Cfg.LocSz < 1) {
+    std::cerr << "Wrong parameters (expect all sizes >= 1)\n";
+    std::terminate();
+  }
+
+#ifndef CIMG_ENABLE
+  if (!Cfg.Image.empty()) {
+    std::cerr << "You need build with CImg support to use this option\n";
+    std::terminate();
+  }
+#endif
+
+  std::cout << "Block size: " << Cfg.Block << std::endl;
+  std::cout << "Data size: " << Cfg.Sz << std::endl;
+  std::cout << "Histogram size: " << Cfg.HistSz << std::endl;
+  std::cout << "Global size: " << Cfg.GlobSz << std::endl;
+  std::cout << "Local size: " << Cfg.LocSz << std::endl;
+  if (Cfg.Vis)
+    std::cout << "Visual mode" << std::endl;
+  return Cfg;
+}
+} // namespace hist
 
 template <typename T> class Histogramm {
   cl::sycl::queue DeviceQueue_;
@@ -130,99 +185,90 @@ void rand_initialize(T *Arr, size_t Sz, int Min, int Max) {
   std::generate(Arr, Arr + Sz, [&] { return D(); });
 }
 
-inline Config read_config(int argc, char **argv) {
-  Config Cfg;
-  optparser_t OptParser;
-  OptParser.template add<int>("bsz", DEF_BSZ, "block size");
-  OptParser.template add<int>("sz", DEF_SZ,
-                              "data size (in bsz-element blocks)");
-  OptParser.template add<int>("hsz", DEF_HSZ, "number of buckets");
-  OptParser.template add<int>("gsz", DEF_GSZ,
-                              "global iteration space (in bsz-element blocks)");
-  OptParser.template add<int>("lsz", DEF_LSZ, "local iteration space");
-#ifdef MEASURE_NORMAL
-  OptParser.template add<int>("vis", 0, "pass 1 to visualize matrices");
-#endif
-  OptParser.parse(argc, argv);
-
-  Cfg.Block = OptParser.template get<int>("bsz");
-  Cfg.Sz = OptParser.template get<int>("sz") * Cfg.Block;
-  Cfg.HistSz = OptParser.template get<int>("hsz");
-  Cfg.GlobSz = OptParser.template get<int>("gsz") * Cfg.Block;
-  Cfg.LocSz = OptParser.template get<int>("lsz");
-#ifdef MEASURE_NORMAL
-  Cfg.Vis = OptParser.template get<int>("vis");
+template <typename HistChildT, typename Ty>
+void single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg, Ty *Data) {
+#if defined(MEASURE_NORMAL)
+  std::cout << "Calculating host" << std::endl;
+  HistogrammHost<Ty> HistH{Q}; // Q unused for this derived class
+  HistogrammTester<Ty> TesterH{HistH, Data, Cfg.Sz, Cfg.HistSz};
+  auto ElapsedH = TesterH.calculate();
+  std::cout << "Measured host time: " << ElapsedH.first / msec_per_sec
+            << std::endl;
+  Ty *HostData = TesterH.getref();
+  if (Cfg.Vis)
+    dump_hist(std::cout, "Host result", HostData, Cfg.HistSz);
 #endif
 
-  if (Cfg.Block < 1 || Cfg.Sz < 1 || Cfg.HistSz < 1 || Cfg.GlobSz < 1 ||
-      Cfg.LocSz < 1) {
-    std::cerr << "Wrong parameters (expect all sizes >= 1)\n";
-    std::terminate();
+  HistChildT Hist{Q, Cfg.GlobSz, Cfg.LocSz};
+
+  HistogrammTester<Ty> Tester{Hist, Data, Cfg.Sz, Cfg.HistSz};
+
+  std::cout << "Calculating gpu" << std::endl;
+  auto Elapsed = Tester.calculate();
+
+  std::cout << "Measured time: " << Elapsed.first / msec_per_sec << std::endl
+            << "Pure execution time: " << Elapsed.second / nsec_per_sec
+            << std::endl;
+
+  Ty *GPUData = Tester.getref();
+
+  if (Cfg.Vis) {
+    dump_hist(std::cout, "Data: ", Tester.getData(), Cfg.Sz);
+    dump_hist(std::cout, "GPU result", GPUData, Cfg.HistSz);
   }
 
-  std::cout << "Block size: " << Cfg.Block << std::endl;
-  std::cout << "Data size: " << Cfg.Sz << std::endl;
-  std::cout << "Histogram size: " << Cfg.HistSz << std::endl;
-  std::cout << "Global size: " << Cfg.GlobSz << std::endl;
-  std::cout << "Local size: " << Cfg.LocSz << std::endl;
-#ifdef MEASURE_NORMAL
-  if (Cfg.Vis)
-    std::cout << "Visual mode" << std::endl;
+#if defined(MEASURE_NORMAL) && defined(VERIFY)
+  // verification with host result
+  for (int I = 0; I < Cfg.HistSz; ++I)
+    if (HostData[I] != GPUData[I]) {
+      std::cout << "Mismatch at: " << I << std::endl;
+      std::cout << HostData[I] << " vs " << GPUData[I] << std::endl;
+      return;
+    }
 #endif
-  return Cfg;
 }
 
 template <typename HistChildT> void test_sequence(int argc, char **argv) {
+  using Ty = typename HistChildT::type;
   std::cout << "Welcome to histogram" << std::endl;
 
   try {
-    Config Cfg = read_config(argc, argv);
+    auto Cfg = hist::read_config(argc, argv);
     auto Q = set_queue();
     print_info(std::cout, Q.get_device());
 
-    std::cout << "Initializing" << std::endl;
-    using Ty = typename HistChildT::type;
-    std::vector<Ty> Data(Cfg.Sz);
-    rand_initialize(Data.data(), Data.size(), 0, Cfg.HistSz - 1);
+    if (Cfg.Image.empty()) {
+      std::vector<Ty> Data;
+      std::cout << "Initializing with random" << std::endl;
+      Data.resize(Cfg.Sz);
+      rand_initialize(Data.data(), Data.size(), 0, Cfg.HistSz - 1);
+      single_hist_sequence<HistChildT>(Q, Cfg, Data.data());
+    } else {
+#ifdef CIMG_ENABLE
+      std::cout << "Initializing with image: " << Cfg.Image << std::endl;
+      cimg_library::CImg<unsigned char> Image(Cfg.Image.c_str());
+      Cfg.Sz = Image.width() * Image.height();
+      std::cout << "Overriding size with image size " << Cfg.Sz << std::endl;
+      cimg_library::CImgDisplay MainDisp(Image, "Histogram image source");
 
-#ifdef MEASURE_NORMAL
-    std::cout << "Calculating host" << std::endl;
-    HistogrammHost<Ty> HistH{Q}; // Q unused for this derived class
-    HistogrammTester<Ty> TesterH{HistH, Data.data(), Cfg.Sz, Cfg.HistSz};
-    auto ElapsedH = TesterH.calculate();
-    std::cout << "Measured host time: " << ElapsedH.first / msec_per_sec
-              << std::endl;
-#endif
+      // RGB channels
+      std::vector<Ty> DataR(Image.data(), Image.data() + Cfg.Sz);
+      std::vector<Ty> DataG(Image.data() + Cfg.Sz, Image.data() + 2 * Cfg.Sz);
+      std::vector<Ty> DataB(Image.data() + 2 * Cfg.Sz,
+                            Image.data() + 3 * Cfg.Sz);
+      single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataR.data());
+      single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataG.data());
+      single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataB.data());
 
-    HistChildT Hist{Q, Cfg.GlobSz, Cfg.LocSz};
-
-    HistogrammTester<Ty> Tester{Hist, Data.data(), Data.size(), Cfg.HistSz};
-
-    std::cout << "Calculating gpu" << std::endl;
-    auto Elapsed = Tester.calculate();
-
-    std::cout << "Measured time: " << Elapsed.first / msec_per_sec << std::endl
-              << "Pure execution time: " << Elapsed.second / nsec_per_sec
-              << std::endl;
-
-#ifdef MEASURE_NORMAL
-    // verification with host result
-    Ty *HostData = TesterH.getref();
-    Ty *GPUData = Tester.getref();
-
-    if (Cfg.Vis) {
-      dump_hist(std::cout, "Data: ", Tester.getData(), Cfg.Sz);
-      dump_hist(std::cout, "Host result", HostData, Cfg.HistSz);
-      dump_hist(std::cout, "GPU result", GPUData, Cfg.HistSz);
+      while (!MainDisp.is_closed()) {
+        cimg_library::cimg::wait(20);
+      }
+#else
+      std::cerr << "Please build with CImg support" << std::endl;
+      std::terminate();
+#endif // CIMG_ENABLE
     }
 
-    for (int I = 0; I < Cfg.HistSz; ++I)
-      if (HostData[I] != GPUData[I]) {
-        std::cout << "Mismatch at: " << I << std::endl;
-        std::cout << HostData[I] << " vs " << GPUData[I] << std::endl;
-        return;
-      }
-#endif
   } catch (cl::sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
     abort();

@@ -37,6 +37,7 @@ set(Boost_USE_MULTITHREADED ON)
 endif()
 
 set(USE_MKL TRUE)
+set(USE_CIMG TRUE)
 
 if(USE_MKL)
 find_package(MKL CONFIG REQUIRED)
@@ -71,9 +72,14 @@ endif()
 # RUNHOST and MEASURE_NORMAL env consumed here
 include(cmake/buildv.cmake)
 
+set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
+
 # interface testers library
 add_library(testers-frame INTERFACE)
 target_include_directories(testers-frame INTERFACE framework)
+if(USE_CIMG)
+target_include_directories(testers-frame INTERFACE ${ROOT_DIR}/cimg)
+endif()
 
 # vector additions
 add_subdirectory(vadd)

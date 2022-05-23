@@ -35,8 +35,10 @@ public:
                                    EBundleTy ExeBundle) override {
     assert(Data != nullptr && Bins != nullptr);
     sycltesters::EvtVec_t ProfInfo;
-    cl::sycl::buffer<T, 1> BufferData(Data, NumData);
-    cl::sycl::buffer<T, 1> BufferBins(Bins, NumBins);
+
+    // avoid memory allocation with use_host_ptr
+    cl::sycl::buffer<T, 1> BufferData(Data, NumData, {host_ptr});
+    cl::sycl::buffer<T, 1> BufferBins(Bins, NumBins, {host_ptr});
     cl::sycl::nd_range<1> DataSz{Gsz_, Lsz_};
     BufferData.set_final_data(nullptr);
 
@@ -56,7 +58,7 @@ public:
       Cgh.parallel_for<class hist_naive_buf<T>>(DataSz, KernHist);
     });
 
-    ProfInfo.push_back(Evt);
+    ProfInfo.emplace_back(Evt, "Calculating histogram");
     Evt.wait();
 
     return ProfInfo;

@@ -47,39 +47,35 @@ public:
     ProfInfo.emplace_back(EvtCpyData, "Copy Data");
     ProfInfo.emplace_back(EvtFillBins, "Zero-out Bins");
 
-    if (Gsz_ < NumBins)
-      throw std::runtime_error("Global size need to be more than # of bins");
-
     auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
       Cgh.depends_on(EvtCpyData);
       Cgh.depends_on(EvtFillBins);
       Cgh.use_kernel_bundle(ExeBundle);
 
       // note local buffer is of NumBins but local iteration size is of LSZ
-      using LTy = cl::sycl::accessor<T, 1, sycl_atomic, sycl_local>;
+      using LTy = cl::sycl::accessor<T, 1, sycl_read_write, sycl_local>;
       LTy LocalHist{cl::sycl::range<1>{NumBins}, Cgh};
-      auto KernHist = [BufferData, NumData, BufferBins, NumBins, LSZ,
-                       LocalHist](cl::sycl::nd_item<1> WorkItem) {
+      auto KernHist = [=](cl::sycl::nd_item<1> WorkItem) {
         const int N = WorkItem.get_global_id(0);
         const int L = WorkItem.get_local_id(0);
         const int Group = WorkItem.get_group(0);
         const int GSZ = WorkItem.get_global_range(0);
 
-        // zero-out
+        // zero-out local memory
         for (int I = L; I < NumBins; I += LSZ)
-          LocalHist[I].store(0);
+          LocalHist[I] = 0;
         WorkItem.barrier(sycl_local_fence);
 
         // building local histograms
         for (int I = N; I < NumData; I += GSZ) {
           const T Data = BufferData[I];
-          LocalHist[Data].fetch_add(1);
+          local_atomic_ref<T>(LocalHist[Data]).fetch_add(1);
         }
-        WorkItem.barrier(sycl_global_fence);
+        WorkItem.barrier(sycl_local_fence);
 
         // combining all local histograms
         for (int I = L; I < NumBins; I += LSZ) {
-          T Data = LocalHist[I].load();
+          const T Data = LocalHist[I];
           global_atomic_ref<T>(BufferBins[I]).fetch_add(Data);
         }
       };

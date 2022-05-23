@@ -225,7 +225,7 @@ HistogrammTester<Ty> single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
     dump_hist(std::cout, "Host result", HostData, Cfg.HistSz);
 #endif
 
-  HistChildT Hist{Q, Cfg.GlobSz, Cfg.LocSz};
+  HistChildT Hist{Q, Cfg};
 
   HistogrammTester<Ty> Tester{Hist, Data, Cfg.Sz, Cfg.HistSz, ExeBundle};
 

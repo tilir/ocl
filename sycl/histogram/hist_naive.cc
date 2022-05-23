@@ -18,6 +18,8 @@
 
 #include "hist_testers.hpp"
 
+using ConfigTy = sycltesters::hist::Config;
+
 // class is used for kernel name
 template <typename T> class hist_naive_shared;
 
@@ -27,9 +29,9 @@ class HistogrammNaiveShared : public sycltesters::Histogramm<T> {
   unsigned Gsz_, Lsz_;
 
 public:
-  HistogrammNaiveShared(cl::sycl::queue &DeviceQueue, unsigned Gsz,
-                        unsigned Lsz)
-      : sycltesters::Histogramm<T>(DeviceQueue), Gsz_(Gsz), Lsz_(Lsz) {}
+  HistogrammNaiveShared(cl::sycl::queue &DeviceQueue, ConfigTy Cfg)
+      : sycltesters::Histogramm<T>(DeviceQueue), Gsz_(Cfg.GlobSz),
+        Lsz_(Cfg.LocSz) {}
 
   sycltesters::EvtRet_t operator()(const T *Data, T *Bins, size_t NumData,
                                    size_t NumBins,

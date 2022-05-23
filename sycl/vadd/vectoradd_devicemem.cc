@@ -30,7 +30,7 @@ public:
 
   sycltesters::EvtRet_t operator()(T const *AVec, T const *BVec, T *CVec,
                                    size_t Sz) override {
-    std::vector<cl::sycl::event> ProfInfo;
+    sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
     int *A = cl::sycl::malloc_device<T>(Sz, DeviceQueue);
     int *B = cl::sycl::malloc_device<T>(Sz, DeviceQueue);

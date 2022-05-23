@@ -31,7 +31,7 @@ public:
 
   sycltesters::EvtRet_t operator()(T *Vec, size_t Sz) override {
     assert(Vec);
-    std::vector<cl::sycl::event> ProfInfo;
+    sycltesters::EvtVec_t ProfInfo;
     if (std::popcount(Sz) != 1 || Sz < 2)
       throw std::runtime_error("Please use only power-of-two arrays");
 

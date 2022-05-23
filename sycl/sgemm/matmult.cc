@@ -35,7 +35,7 @@ public:
   sycltesters::EvtRet_t operator()(const T *Aptr, const T *Bptr, T *Cptr,
                                    size_t AX, size_t AY, size_t BY) override {
     assert(Aptr != nullptr && Bptr != nullptr && Cptr != nullptr);
-    std::vector<cl::sycl::event> ProfInfo;
+    sycltesters::EvtVec_t ProfInfo;
     cl::sycl::range<2> Asz{AX, AY}, Bsz{AY, BY}, Csz{AX, BY};
     cl::sycl::buffer<T, 2> BufferA(Aptr, Asz), BufferB(Bptr, Bsz),
         BufferC(Cptr, Csz);

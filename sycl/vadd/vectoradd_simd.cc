@@ -35,7 +35,7 @@ public:
   sycltesters::EvtRet_t operator()(T const *AVec, T const *BVec, T *CVec,
                                    size_t Sz) override {
     assert((Sz % VL) == 0 && "We need Sz to be evenly divisible by VL");
-    std::vector<cl::sycl::event> ProfInfo;
+    sycltesters::EvtVec_t ProfInfo;
     cl::sycl::buffer<T, 1> bufferA(AVec, Sz, {host_ptr});
     cl::sycl::buffer<T, 1> bufferB(BVec, Sz, {host_ptr});
     cl::sycl::buffer<T, 1> bufferC(CVec, Sz, {host_ptr});

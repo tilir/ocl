@@ -37,7 +37,7 @@ public:
     assert(Aptr != nullptr && Bptr != nullptr && Cptr != nullptr);
     const auto LSZ = Lsz_; // avoid implicit capture of this
     assert((AY % LSZ) == 0);
-    std::vector<cl::sycl::event> ProfInfo;
+    sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
 
     auto *A = cl::sycl::malloc_shared<T>(AX * AY, DeviceQueue);

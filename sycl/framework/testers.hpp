@@ -36,8 +36,18 @@ constexpr auto sycl_local = cl::sycl::access::target::local;
 constexpr auto sycl_local_fence = cl::sycl::access::fence_space::local_space;
 constexpr auto sycl_global_fence = cl::sycl::access::fence_space::global_space;
 
+// convenient kernel bundle type aliases
+using IBundleTy = sycl::kernel_bundle<sycl::bundle_state::input>;
+using OBundleTy = sycl::kernel_bundle<sycl::bundle_state::object>;
+using EBundleTy = sycl::kernel_bundle<sycl::bundle_state::executable>;
+
 // convenient buffer property aliases
 constexpr auto host_ptr = cl::sycl::property::buffer::use_host_ptr{};
+
+constexpr auto EvtStart = sycl::info::event_profiling::command_start;
+constexpr auto EvtEnd = sycl::info::event_profiling::command_end;
+constexpr auto EvtStatus = sycl::info::event::command_execution_status;
+constexpr auto EvtComplete = sycl::info::event_command_status::complete;
 
 // milliseconds, microsecond and nanoseconds
 static const double msec_per_sec = 1000.0;
@@ -82,18 +92,35 @@ inline std::ostream &print_info(std::ostream &Os, cl::sycl::device D) {
   return Os;
 }
 
-using EvtRet_t = std::optional<std::vector<cl::sycl::event>>;
+struct NamedEvent {
+  cl::sycl::event Evt_;
+  std::string Name_;
+  NamedEvent(cl::sycl::event Evt, std::string Name = "Unnamed")
+      : Evt_(Evt), Name_(std::move(Name)) {}
+};
 
-inline unsigned getTime(EvtRet_t Opt) {
-  auto AccTime = 0;
+using EvtVec_t = std::vector<NamedEvent>;
+using EvtRet_t = std::optional<EvtVec_t>;
+
+inline unsigned getTime(EvtRet_t Opt, bool Quiet = true) {
+  auto AccTime = 0, EvtIdx = 0;
   if (!Opt.has_value())
     return AccTime;
   auto &&Evts = Opt.value();
-  for (auto &&Evt : Evts) {
-    auto Start =
-        Evt.get_profiling_info<sycl::info::event_profiling::command_start>();
-    auto End =
-        Evt.get_profiling_info<sycl::info::event_profiling::command_end>();
+  for (auto &&NEvt : Evts) {
+    cl::sycl::event &Evt = NEvt.Evt_;
+    if (!Quiet)
+      std::cout << EvtIdx++ << " (" << NEvt.Name_ << "): ";
+    auto Status = Evt.get_info<EvtStatus>();
+    if (Status != EvtComplete) {
+      if (!Quiet)
+        std::cout << " [...] ";
+      Evt.wait();
+    }
+    auto Start = Evt.get_profiling_info<EvtStart>();
+    auto End = Evt.get_profiling_info<EvtEnd>();
+    if (!Quiet)
+      std::cout << ((End - Start) / nsec_per_sec) << std::endl;
     AccTime += End - Start;
   }
   return AccTime;

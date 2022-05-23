@@ -32,7 +32,7 @@ public:
 
   sycltesters::EvtRet_t operator()(T const *AVec, T const *BVec, T *CVec,
                                    size_t Sz) override {
-    std::vector<cl::sycl::event> ProfInfo;
+    sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
     cl::sycl::range<1> numOfItems{Sz};
     cl::sycl::buffer<T, 1> bufferA{AVec, numOfItems, {host_ptr}};

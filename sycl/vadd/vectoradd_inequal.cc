@@ -29,7 +29,7 @@ public:
 
   sycltesters::EvtRet_t operator()(T const *AVec, T const *BVec, T *CVec,
                                    size_t Sz) override {
-    std::vector<cl::sycl::event> ProfInfo;
+    sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
 
 #ifdef HOST_ALLOC

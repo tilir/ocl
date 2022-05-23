@@ -31,9 +31,10 @@ public:
       : sycltesters::Histogramm<T>(DeviceQueue), Gsz_(Gsz), Lsz_(Lsz) {}
 
   sycltesters::EvtRet_t operator()(const T *Data, T *Bins, size_t NumData,
-                                   size_t NumBins) override {
+                                   size_t NumBins,
+                                   EBundleTy ExeBundle) override {
     assert(Data != nullptr && Bins != nullptr);
-    std::vector<cl::sycl::event> ProfInfo;
+    sycltesters::EvtVec_t ProfInfo;
     cl::sycl::buffer<T, 1> BufferData(Data, NumData);
     cl::sycl::buffer<T, 1> BufferBins(Bins, NumBins);
     cl::sycl::nd_range<1> DataSz{Gsz_, Lsz_};
@@ -63,5 +64,6 @@ public:
 };
 
 int main(int argc, char **argv) {
-  sycltesters::test_sequence<HistogrammNaiveBuf<int>>(argc, argv);
+  sycl::kernel_id kid = sycl::get_kernel_id<hist_naive_buf<int>>();
+  sycltesters::test_sequence<HistogrammNaiveBuf<int>>(argc, argv, kid);
 }

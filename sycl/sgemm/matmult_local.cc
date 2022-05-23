@@ -36,7 +36,7 @@ public:
     assert(Aptr != nullptr && Bptr != nullptr && Cptr != nullptr);
     const auto LSZ = Lsz_; // avoid implicit capture of this
     assert((AY % LSZ) == 0);
-    std::vector<cl::sycl::event> ProfInfo;
+    sycltesters::EvtVec_t ProfInfo;
     cl::sycl::range<2> Asz{AX, AY}, Bsz{AY, BY}, Csz{AX, BY};
     cl::sycl::buffer<T, 2> BufferA(Aptr, Asz), BufferB(Bptr, Bsz),
         BufferC(Cptr, Csz);

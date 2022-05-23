@@ -32,17 +32,25 @@ public:
       : sycltesters::Histogramm<T>(DeviceQueue), Gsz_(Gsz), Lsz_(Lsz) {}
 
   sycltesters::EvtRet_t operator()(const T *Data, T *Bins, size_t NumData,
-                                   size_t NumBins) override {
+                                   size_t NumBins,
+                                   EBundleTy ExeBundle) override {
     assert(Data != nullptr && Bins != nullptr);
-    std::vector<cl::sycl::event> ProfInfo;
+    sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
     auto *BufferData = cl::sycl::malloc_shared<T>(NumData, DeviceQueue);
     auto *BufferBins = cl::sycl::malloc_shared<T>(NumBins, DeviceQueue);
-    std::copy(Data, Data + NumData, BufferData);
-    std::copy(Bins, Bins + NumBins, BufferBins); // zero-out
+
+    auto EvtCpyData = DeviceQueue.copy(Data, BufferData, NumData);
+    auto EvtFillBins = DeviceQueue.copy(Bins, BufferBins, NumBins);
     cl::sycl::nd_range<1> DataSz{Gsz_, Lsz_};
+    ProfInfo.emplace_back(EvtCpyData, "Copy Data");
+    ProfInfo.emplace_back(EvtFillBins, "Zero-out Bins");
 
     auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
+      Cgh.depends_on(EvtCpyData);
+      Cgh.depends_on(EvtFillBins);
+      Cgh.use_kernel_bundle(ExeBundle);
+
       auto KernHist = [BufferData, NumData,
                        BufferBins](cl::sycl::nd_item<1> WorkItem) {
         const int N = WorkItem.get_global_id(0);
@@ -54,11 +62,12 @@ public:
       Cgh.parallel_for<class hist_naive_shared<T>>(DataSz, KernHist);
     });
 
-    ProfInfo.push_back(Evt);
-    Evt.wait();
+    ProfInfo.emplace_back(Evt, "Calculate histogramm");
 
-    // copy back
-    std::copy(BufferBins, BufferBins + NumBins, Bins);
+    // copy back (note dependency on Evt)
+    auto EvtCpyBins = DeviceQueue.copy(BufferBins, Bins, NumBins, Evt);
+    ProfInfo.emplace_back(EvtCpyBins, "Copy bins back");
+    DeviceQueue.wait();
 
     cl::sycl::free(BufferData, DeviceQueue);
     cl::sycl::free(BufferBins, DeviceQueue);
@@ -67,5 +76,6 @@ public:
 };
 
 int main(int argc, char **argv) {
-  sycltesters::test_sequence<HistogrammNaiveShared<int>>(argc, argv);
+  sycl::kernel_id kid = sycl::get_kernel_id<hist_naive_shared<int>>();
+  sycltesters::test_sequence<HistogrammNaiveShared<int>>(argc, argv, kid);
 }

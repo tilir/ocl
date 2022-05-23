@@ -34,8 +34,8 @@ public:
   sycltesters::EvtRet_t operator()(const T *Aptr, const T *Bptr, T *Cptr,
                                    size_t AX, size_t AY, size_t BY) override {
     assert(Aptr != nullptr && Bptr != nullptr && Cptr != nullptr);
-    std::vector<cl::sycl::event> ProfInfo;
-    std::vector<cl::sycl::event> GemmDependencies;
+    sycltesters::EvtVec_t ProfInfo;
+    sycltesters::EvtVec_t GemmDependencies;
     auto &DeviceQueue = Queue();
 
     // C = alpha * op(A) * op(B)  + beta * C

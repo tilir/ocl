@@ -5,7 +5,6 @@
 //
 // Macros to control things:
 //  * inherited from testers.hpp: RUNHOST, INORD...
-//  -DMEASURE_NORMAL : measure with normal host code
 //
 // Options to control things:
 // -bsz=<bsz> : block size
@@ -61,18 +60,9 @@
 #endif
 #include "testers.hpp"
 
-// we will need global and local atomic references
-template <typename T>
-using local_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
-    T, cl::sycl::memory_order::relaxed, cl::sycl::memory_scope::work_group,
-    cl::sycl::access::address_space::local_space>;
-
-template <typename T>
-using global_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
-    T, cl::sycl::memory_order::relaxed, cl::sycl::memory_scope::system,
-    cl::sycl::access::address_space::global_space>;
-
 namespace sycltesters {
+
+namespace hist {
 
 constexpr int DEF_BSZ = 128;
 constexpr int DEF_SZ = 1024; // data size in blocks
@@ -84,16 +74,15 @@ constexpr int DEF_VIS = 0;
 constexpr int DEF_ZEROOUT = 0;
 constexpr int DEF_DETAILED = 0;
 
-namespace hist {
-
 struct Config {
-  int Block, Sz, HistSz, GlobSz, LocSz, Vis, BWidth, Zero, Detailed;
+  bool Vis, Zero, Detailed;
+  int Block, Sz, HistSz, GlobSz, LocSz, BWidth;
   std::string Image;
 };
 
 inline Config read_config(int argc, char **argv) {
   Config Cfg;
-  optparser_t OptParser;
+  options::Parser OptParser;
   OptParser.template add<int>("bsz", DEF_BSZ, "block size");
   OptParser.template add<int>("sz", DEF_SZ,
                               "data size (in bsz-element blocks)");
@@ -101,7 +90,7 @@ inline Config read_config(int argc, char **argv) {
   OptParser.template add<int>("gsz", DEF_GSZ,
                               "global iteration space (in bsz-element blocks)");
   OptParser.template add<int>("lsz", DEF_LSZ, "local iteration space");
-  OptParser.template add<int>("vis", 0, "pass 1 to visualize matrices");
+  OptParser.template add<int>("vis", 0, "pass 1 to visualize histogram");
   OptParser.template add<std::string>("img", "",
                                       "pass image path to load image");
   OptParser.template add<int>("bwidth", DEF_BWIDTH,
@@ -116,10 +105,10 @@ inline Config read_config(int argc, char **argv) {
   Cfg.HistSz = OptParser.template get<int>("hsz");
   Cfg.GlobSz = OptParser.template get<int>("gsz") * Cfg.Block;
   Cfg.LocSz = OptParser.template get<int>("lsz");
-  Cfg.Vis = OptParser.template get<int>("vis");
+  Cfg.Vis = OptParser.exists("vis");
   Cfg.BWidth = OptParser.template get<int>("bwidth");
-  Cfg.Zero = OptParser.template get<int>("zero");
-  Cfg.Detailed = OptParser.template get<int>("detailed");
+  Cfg.Zero = OptParser.exists("zero");
+  Cfg.Detailed = OptParser.exists("detailed");
 
   if (Cfg.Block < 1 || Cfg.Sz < 1 || Cfg.HistSz < 1 || Cfg.GlobSz < 1 ||
       Cfg.LocSz < 1) {

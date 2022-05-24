@@ -25,7 +25,7 @@
 
 #include <CL/sycl.hpp>
 
-// convenient sycl access mode synonyms
+// sycl access mode synonyms
 constexpr auto sycl_read = cl::sycl::access::mode::read;
 constexpr auto sycl_write = cl::sycl::access::mode::write;
 constexpr auto sycl_read_write = cl::sycl::access::mode::read_write;
@@ -36,14 +36,15 @@ constexpr auto sycl_local = cl::sycl::access::target::local;
 constexpr auto sycl_local_fence = cl::sycl::access::fence_space::local_space;
 constexpr auto sycl_global_fence = cl::sycl::access::fence_space::global_space;
 
-// convenient kernel bundle type aliases
+// kernel bundle type aliases
 using IBundleTy = sycl::kernel_bundle<sycl::bundle_state::input>;
 using OBundleTy = sycl::kernel_bundle<sycl::bundle_state::object>;
 using EBundleTy = sycl::kernel_bundle<sycl::bundle_state::executable>;
 
-// convenient buffer property aliases
+// buffer property aliases
 constexpr auto host_ptr = cl::sycl::property::buffer::use_host_ptr{};
 
+// event and profiling aliases
 constexpr auto EvtStart = sycl::info::event_profiling::command_start;
 constexpr auto EvtEnd = sycl::info::event_profiling::command_end;
 constexpr auto EvtStatus = sycl::info::event::command_execution_status;
@@ -53,6 +54,17 @@ constexpr auto EvtComplete = sycl::info::event_command_status::complete;
 static const double msec_per_sec = 1000.0;
 static const double usec_per_sec = msec_per_sec * msec_per_sec;
 static const double nsec_per_sec = msec_per_sec * msec_per_sec * msec_per_sec;
+
+// global and local atomic references
+template <typename T>
+using global_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
+    T, cl::sycl::memory_order::relaxed, cl::sycl::memory_scope::system,
+    cl::sycl::access::address_space::global_space>;
+
+template <typename T>
+using local_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
+    T, cl::sycl::memory_order::relaxed, cl::sycl::memory_scope::work_group,
+    cl::sycl::access::address_space::local_space>;
 
 // convenient namspaces
 namespace esimd = sycl::ext::intel::experimental::esimd;

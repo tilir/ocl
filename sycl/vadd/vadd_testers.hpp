@@ -114,7 +114,7 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
   try {
     unsigned Size = 0, NReps = 0;
 
-    optparser_t OptParser;
+    options::Parser OptParser;
     OptParser.template add<int>("size", LIST_SIZE, "size of vectors to add");
     OptParser.template add<int>("nreps", NREPS,
                                 "number of repetitions in tester loop");

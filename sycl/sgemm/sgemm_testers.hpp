@@ -58,7 +58,7 @@ struct Config {
 inline Config read_config(int argc, char **argv) {
   Config Cfg;
 
-  optparser_t OptParser;
+  options::Parser OptParser;
   OptParser.template add<int>(
       "ax", DEF_AX, "size X of matrix A in A * B in bsz-element blocks");
   OptParser.template add<int>(

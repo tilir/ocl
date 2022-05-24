@@ -17,10 +17,12 @@
 
 #include <boost/program_options.hpp>
 
+namespace options {
+
 namespace po = boost::program_options;
 using namespace std::string_literals;
 
-class optparser_t final {
+class Parser final {
   po::options_description desc_ = "Available options"s;
   po::variables_map vm_;
   std::string platform_;
@@ -29,7 +31,7 @@ class optparser_t final {
   bool parsed_ = false;
 
 public:
-  optparser_t() {
+  Parser() {
     desc_.add_options()("help", "Produce help message");
     desc_.add_options()("size", po::value<int>()->default_value(0),
                         "workload main size");
@@ -65,3 +67,5 @@ public:
 
   bool parsed() const noexcept { return parsed_; }
 };
+
+} // namespace options

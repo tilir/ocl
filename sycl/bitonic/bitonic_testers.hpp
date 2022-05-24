@@ -50,7 +50,7 @@ struct Config {
 
 inline Config read_config(int argc, char **argv) {
   Config Cfg;
-  optparser_t OptParser;
+  options::Parser OptParser;
   OptParser.template add<int>(
       "size", DEF_SIZE, "logarithmic size to sort (1 << size) is real size");
   OptParser.template add<int>("lsz", DEF_BLOCK_SIZE, "local size");

@@ -21,13 +21,13 @@
 //
 // Try:
 // > hist_naive.exe -sz=16 -bsz=1 -gsz=8 -hsz=4 -lsz=2 -vis=1 -zero=1
-// > hist_naive.exe -img=..\favn.jpg
+// > hist_naive.exe -img=..\favn.jpg -hsz=260
 //
 // Perf measures for TGLLP:
-// > hist_local.exe -sz=200000 -bsz=1000 -zero=1
-// pure exec time on GPU ~= 0.03
-// > hist_naive.exe -sz=200000 -bsz=1000 -zero=1
-// pure exec time on GPU ~= 0.3
+// > hist_local.exe -sz=200000 -zero=1
+// pure exec time on GPU ~= 0.09
+// > hist_naive.exe -sz=200000 -zero=1
+// pure exec time on GPU ~= 0.4
 //
 //------------------------------------------------------------------------------
 //
@@ -64,9 +64,9 @@ namespace sycltesters {
 
 namespace hist {
 
-constexpr int DEF_BSZ = 128;
-constexpr int DEF_SZ = 1024; // data size in blocks
-constexpr int DEF_HSZ = 260;
+constexpr int DEF_BSZ = 1024;
+constexpr int DEF_SZ = 10000; // data size in blocks
+constexpr int DEF_HSZ = 256;
 constexpr int DEF_GSZ = 64; // global iteration space in blocks
 constexpr int DEF_LSZ = 32;
 constexpr int DEF_BWIDTH = 2;
@@ -193,8 +193,7 @@ public:
 template <typename T>
 void dump_hist(std::ostream &Os, std::string Name, const T *Data, int Sz) {
   Os << Name << ":\n";
-  std::ostream_iterator<T> OsIt(Os, " ");
-  std::copy(Data, Data + Sz, OsIt);
+  visualize_seq(Data, Data + Sz, Os);
   Os << "\n";
 }
 

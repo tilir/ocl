@@ -93,6 +93,9 @@ add_subdirectory(sgemm)
 # histograms
 add_subdirectory(histogram)
 
+# reductions
+add_subdirectory(reduction)
+
 # dump folder for shader dumps if any
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/dumps)
 

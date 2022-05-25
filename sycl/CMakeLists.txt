@@ -12,11 +12,13 @@
 #------------------------------------------------------------------------------
 #
 #  Useful options:
-#  -DUSE_BOOST if you have installed findable boost (for better option parser)
-#  -DRUNHOST run without GPU (SYCL as a host code)
-#  -DMEASURE_NORMAL to measure with reference code
-#  -DVERIFY to verify results (for instance that sorting actually sorted smth)
-#  -DINORD to use inorder queues
+#  -DUSE_BOOST=1 if you have installed findable boost (for better option parser)
+#  -DRUNHOST=1 run without GPU (SYCL as a host code)
+#  -DMEASURE_NORMAL=1 to measure with reference code
+#  -DVERIFY=1 to verify results (for instance that sorting actually sorted smth)
+#  -DINORD=1 to use inorder queues
+#  -DUSE_MKL=1 to build MKL-dependent kernels
+#  -DUSE_CIMG=1 to build CIMG-dependent kernels
 #
 #------------------------------------------------------------------------------
 #
@@ -35,9 +37,6 @@ project(syclexamples)
 if(USE_BOOST)
 set(Boost_USE_MULTITHREADED ON)
 endif()
-
-set(USE_MKL TRUE)
-set(USE_CIMG TRUE)
 
 if(USE_MKL)
 find_package(MKL CONFIG REQUIRED)

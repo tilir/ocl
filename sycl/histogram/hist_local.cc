@@ -33,11 +33,12 @@ public:
       : sycltesters::Histogramm<T>(DeviceQueue), Gsz_(Cfg.GlobSz),
         Lsz_(Cfg.LocSz) {}
 
-  sycltesters::EvtRet_t operator()(const T *Data, T *Bins, size_t NumData,
-                                   size_t NumBins,
+  sycltesters::EvtRet_t operator()(const T *Data, T *Bins, int NumData,
+                                   int NumBins,
                                    EBundleTy ExeBundle) override {
     assert(Data != nullptr && Bins != nullptr);
     const auto LSZ = Lsz_; // avoid implicit capture of this
+    const size_t LMEM = NumBins;
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
     auto *BufferData = cl::sycl::malloc_shared<T>(NumData, DeviceQueue);
@@ -56,7 +57,8 @@ public:
 
       // note local buffer is of NumBins but local iteration size is of LSZ
       using LTy = cl::sycl::accessor<T, 1, sycl_read_write, sycl_local>;
-      LTy LocalHist{cl::sycl::range<1>{NumBins}, Cgh};
+      sycl::range<1> LocalMemorySize{LMEM};
+      LTy LocalHist{LocalMemorySize, Cgh};
       auto KernHist = [=](cl::sycl::nd_item<1> WorkItem) {
         const int N = WorkItem.get_global_id(0);
         const int L = WorkItem.get_local_id(0);

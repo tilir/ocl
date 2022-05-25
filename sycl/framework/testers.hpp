@@ -26,15 +26,15 @@
 #include <CL/sycl.hpp>
 
 // sycl access mode synonyms
-constexpr auto sycl_read = cl::sycl::access::mode::read;
-constexpr auto sycl_write = cl::sycl::access::mode::write;
-constexpr auto sycl_read_write = cl::sycl::access::mode::read_write;
-constexpr auto sycl_atomic = cl::sycl::access::mode::atomic;
+constexpr auto sycl_read = sycl::access::mode::read;
+constexpr auto sycl_write = sycl::access::mode::write;
+constexpr auto sycl_read_write = sycl::access::mode::read_write;
+constexpr auto sycl_atomic = sycl::access::mode::atomic;
 
 // local target and fence aliases
-constexpr auto sycl_local = cl::sycl::access::target::local;
-constexpr auto sycl_local_fence = cl::sycl::access::fence_space::local_space;
-constexpr auto sycl_global_fence = cl::sycl::access::fence_space::global_space;
+constexpr auto sycl_local = sycl::access::target::local;
+constexpr auto sycl_local_fence = sycl::access::fence_space::local_space;
+constexpr auto sycl_global_fence = sycl::access::fence_space::global_space;
 
 // kernel bundle type aliases
 using IBundleTy = sycl::kernel_bundle<sycl::bundle_state::input>;
@@ -42,7 +42,7 @@ using OBundleTy = sycl::kernel_bundle<sycl::bundle_state::object>;
 using EBundleTy = sycl::kernel_bundle<sycl::bundle_state::executable>;
 
 // buffer property aliases
-constexpr auto host_ptr = cl::sycl::property::buffer::use_host_ptr{};
+constexpr auto host_ptr = sycl::property::buffer::use_host_ptr{};
 
 // event and profiling aliases
 constexpr auto EvtStart = sycl::info::event_profiling::command_start;
@@ -57,14 +57,14 @@ static const double nsec_per_sec = msec_per_sec * msec_per_sec * msec_per_sec;
 
 // global and local atomic references
 template <typename T>
-using global_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
-    T, cl::sycl::memory_order::relaxed, cl::sycl::memory_scope::system,
-    cl::sycl::access::address_space::global_space>;
+using global_atomic_ref = sycl::atomic_ref<
+    T, sycl::memory_order::relaxed, sycl::memory_scope::system,
+    sycl::access::address_space::global_space>;
 
 template <typename T>
-using local_atomic_ref = cl::sycl::ext::oneapi::atomic_ref<
-    T, cl::sycl::memory_order::relaxed, cl::sycl::memory_scope::work_group,
-    cl::sycl::access::address_space::local_space>;
+using local_atomic_ref = sycl::atomic_ref<
+    T, sycl::memory_order::relaxed, sycl::memory_scope::work_group,
+    sycl::access::address_space::local_space>;
 
 // convenient namspaces
 namespace esimd = sycl::ext::intel::experimental::esimd;
@@ -96,18 +96,18 @@ public:
   }
 };
 
-inline std::ostream &print_info(std::ostream &Os, cl::sycl::device D) {
-  Os << D.template get_info<cl::sycl::info::device::name>() << "\n";
+inline std::ostream &print_info(std::ostream &Os, sycl::device D) {
+  Os << D.template get_info<sycl::info::device::name>() << "\n";
   Os << "Driver version: "
-     << D.template get_info<cl::sycl::info::device::driver_version>() << "\n";
-  Os << D.template get_info<cl::sycl::info::device::opencl_c_version>() << "\n";
+     << D.template get_info<sycl::info::device::driver_version>() << "\n";
+  Os << D.template get_info<sycl::info::device::opencl_c_version>() << "\n";
   return Os;
 }
 
 struct NamedEvent {
-  cl::sycl::event Evt_;
+  sycl::event Evt_;
   std::string Name_;
-  NamedEvent(cl::sycl::event Evt, std::string Name = "Unnamed")
+  NamedEvent(sycl::event Evt, std::string Name = "Unnamed")
       : Evt_(Evt), Name_(std::move(Name)) {}
 };
 
@@ -120,17 +120,17 @@ inline unsigned getTime(EvtRet_t Opt, bool Quiet = true) {
     return AccTime;
   auto &&Evts = Opt.value();
   for (auto &&NEvt : Evts) {
-    cl::sycl::event &Evt = NEvt.Evt_;
+    sycl::event &Evt = NEvt.Evt_;
     if (!Quiet)
       std::cout << EvtIdx++ << " (" << NEvt.Name_ << "): ";
-    auto Status = Evt.get_info<EvtStatus>();
-    if (Status != EvtComplete) {
+    sycl::info::event_command_status EStatus = Evt.template get_info<EvtStatus>();
+    if (EStatus != EvtComplete) {
       if (!Quiet)
         std::cout << " [...] ";
       Evt.wait();
     }
-    auto Start = Evt.get_profiling_info<EvtStart>();
-    auto End = Evt.get_profiling_info<EvtEnd>();
+    auto Start = Evt.template get_profiling_info<EvtStart>();
+    auto End = Evt.template get_profiling_info<EvtEnd>();
     if (!Quiet)
       std::cout << ((End - Start) / nsec_per_sec) << std::endl;
     AccTime += End - Start;
@@ -138,24 +138,24 @@ inline unsigned getTime(EvtRet_t Opt, bool Quiet = true) {
   return AccTime;
 }
 
-inline cl::sycl::queue set_queue() {
+inline sycl::queue set_queue() {
   auto Exception_handler = [](sycl::exception_list e_list) {
     for (std::exception_ptr const &e : e_list)
       std::rethrow_exception(e);
   };
 
 #ifdef INORD
-  cl::sycl::property_list PropList{
+  sycl::property_list PropList{
       sycl::property::queue::in_order(),
-      cl::sycl::property::queue::enable_profiling()};
+      sycl::property::queue::enable_profiling()};
 #else
-  cl::sycl::property_list PropList{
-      cl::sycl::property::queue::enable_profiling()};
+  sycl::property_list PropList{
+      sycl::property::queue::enable_profiling()};
 #endif
 
   // use env "SYCL_DEVICE_FILTER=cpu" to run on host
-  cl::sycl::default_selector Sel;
-  cl::sycl::queue Q{Sel, Exception_handler, PropList};
+  sycl::default_selector Sel;
+  sycl::queue Q{Sel, Exception_handler, PropList};
   return Q;
 }
 
@@ -163,7 +163,7 @@ struct Dice {
   std::uniform_int_distribution<int> Uid;
 
   Dice(int Min, int Max) : Uid(Min, Max) {}
-  int operator()() const {
+  int operator()() {
     static std::random_device Rd;
     static std::mt19937 Rng{Rd()};
     return Uid(Rng);

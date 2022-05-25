@@ -53,8 +53,6 @@
 #include "optparse_alt.hpp"
 #endif
 
-#define CIMG_ENABLE
-
 #ifdef CIMG_ENABLE
 #include "drawer.hpp"
 #endif
@@ -142,8 +140,8 @@ template <typename T> class Histogramm {
 public:
   using type = T;
   Histogramm(cl::sycl::queue &DeviceQueue) : DeviceQueue_(DeviceQueue) {}
-  virtual EvtRet_t operator()(const T *Data, T *Bins, size_t NumData,
-                              size_t NumBins, EBundleTy ExeBundle) = 0;
+  virtual EvtRet_t operator()(const T *Data, T *Bins, int NumData,
+                              int NumBins, EBundleTy ExeBundle) = 0;
   cl::sycl::queue &Queue() { return DeviceQueue_; }
   const cl::sycl::queue &Queue() const { return DeviceQueue_; }
   virtual ~Histogramm() {}
@@ -151,7 +149,7 @@ public:
 
 template <typename T> struct HistogrammHost : public Histogramm<T> {
   HistogrammHost(cl::sycl::queue &DeviceQueue) : Histogramm<T>(DeviceQueue) {}
-  EvtRet_t operator()(const T *Data, T *Bins, size_t NumData, size_t NumBins,
+  EvtRet_t operator()(const T *Data, T *Bins, int NumData, int NumBins,
                       EBundleTy ExeBundle) override {
     for (int i = 0; i < NumData; i++) {
       assert(Data[i] < NumBins);
@@ -165,13 +163,13 @@ template <typename T> class HistogrammTester {
   Histogramm<T> &Hist_;
   Timer Timer_;
   const T *Data_;
-  size_t NumData_, NumBins_;
+  int NumData_, NumBins_;
   std::vector<T> Bins_;
   EBundleTy ExeBundle_;
 
 public:
-  HistogrammTester(Histogramm<T> &Hist, const T *Data, size_t NumData,
-                   size_t NumBins, EBundleTy ExeBundle)
+  HistogrammTester(Histogramm<T> &Hist, const T *Data, int NumData,
+                   int NumBins, EBundleTy ExeBundle)
       : Hist_(Hist), Data_(Data), NumData_(NumData), NumBins_(NumBins),
         Bins_(NumBins), ExeBundle_(ExeBundle) {}
 
@@ -244,6 +242,7 @@ HistogrammTester<Ty> single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
   return Tester;
 }
 
+#ifdef CIMG_ENABLE
 // implemented in terms of single_hist_sequence
 template <typename HistChildT>
 void cimg_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
@@ -290,6 +289,7 @@ void cimg_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
     cimg_library::cimg::wait(20);
   }
 }
+#endif
 
 template <typename HistChildT>
 void test_sequence(int argc, char **argv, sycl::kernel_id kid) {

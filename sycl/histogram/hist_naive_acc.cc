@@ -33,8 +33,8 @@ public:
       : sycltesters::Histogramm<T>(DeviceQueue), Gsz_(Cfg.GlobSz),
         Lsz_(Cfg.LocSz) {}
 
-  sycltesters::EvtRet_t operator()(const T *Data, T *Bins, size_t NumData,
-                                   size_t NumBins,
+  sycltesters::EvtRet_t operator()(const T *Data, T *Bins, int NumData,
+                                   int NumBins,
                                    EBundleTy ExeBundle) override {
     assert(Data != nullptr && Bins != nullptr);
     sycltesters::EvtVec_t ProfInfo;

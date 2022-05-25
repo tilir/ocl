@@ -34,8 +34,7 @@ public:
         Lsz_(Cfg.LocSz) {}
 
   sycltesters::EvtRet_t operator()(const T *Data, T *Bins, int NumData,
-                                   int NumBins,
-                                   EBundleTy ExeBundle) override {
+                                   int NumBins, EBundleTy ExeBundle) override {
     assert(Data != nullptr && Bins != nullptr);
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();

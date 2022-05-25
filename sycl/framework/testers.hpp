@@ -3,8 +3,7 @@
 // Generic code to test different variants of sycl programs
 // Avoiding tons of boilerplate otherwise
 //
-// Macros to control things:
-//  -DINORD          : use inorder queues
+// Macros to control things: see comment in CMakeLists.txt
 //
 //------------------------------------------------------------------------------
 //
@@ -55,16 +54,29 @@ static const double msec_per_sec = 1000.0;
 static const double usec_per_sec = msec_per_sec * msec_per_sec;
 static const double nsec_per_sec = msec_per_sec * msec_per_sec * msec_per_sec;
 
+#ifdef _WIN32
+// For some reasons, no sycl::atomic_ref in OneAPI Windows release
+// Yet it exists in SYCL 2020
+// So welcome another hack.
+namespace sycl {
+template <typename T, memory_order DefaultOrder, memory_scope DefaultScope,
+          access::address_space AddressSpace>
+using atomic_ref =
+    ext::oneapi::atomic_ref<T, DefaultOrder, DefaultScope, AddressSpace>;
+}
+#endif
+
 // global and local atomic references
 template <typename T>
-using global_atomic_ref = sycl::atomic_ref<
-    T, sycl::memory_order::relaxed, sycl::memory_scope::system,
-    sycl::access::address_space::global_space>;
+using global_atomic_ref =
+    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::system,
+                     sycl::access::address_space::global_space>;
 
 template <typename T>
-using local_atomic_ref = sycl::atomic_ref<
-    T, sycl::memory_order::relaxed, sycl::memory_scope::work_group,
-    sycl::access::address_space::local_space>;
+using local_atomic_ref =
+    sycl::atomic_ref<T, sycl::memory_order::relaxed,
+                     sycl::memory_scope::work_group,
+                     sycl::access::address_space::local_space>;
 
 // convenient namspaces
 namespace esimd = sycl::ext::intel::experimental::esimd;
@@ -123,7 +135,8 @@ inline unsigned getTime(EvtRet_t Opt, bool Quiet = true) {
     sycl::event &Evt = NEvt.Evt_;
     if (!Quiet)
       std::cout << EvtIdx++ << " (" << NEvt.Name_ << "): ";
-    sycl::info::event_command_status EStatus = Evt.template get_info<EvtStatus>();
+    sycl::info::event_command_status EStatus =
+        Evt.template get_info<EvtStatus>();
     if (EStatus != EvtComplete) {
       if (!Quiet)
         std::cout << " [...] ";
@@ -145,12 +158,10 @@ inline sycl::queue set_queue() {
   };
 
 #ifdef INORD
-  sycl::property_list PropList{
-      sycl::property::queue::in_order(),
-      sycl::property::queue::enable_profiling()};
+  sycl::property_list PropList{sycl::property::queue::in_order(),
+                               sycl::property::queue::enable_profiling()};
 #else
-  sycl::property_list PropList{
-      sycl::property::queue::enable_profiling()};
+  sycl::property_list PropList{sycl::property::queue::enable_profiling()};
 #endif
 
   // use env "SYCL_DEVICE_FILTER=cpu" to run on host

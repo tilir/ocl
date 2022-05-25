@@ -40,8 +40,7 @@ public:
         Lsz_(Cfg.LocSz) {}
 
   sycltesters::EvtRet_t operator()(const T *Data, T *Bins, int NumData,
-                                   int NumBins,
-                                   EBundleTy ExeBundle) override {
+                                   int NumBins, EBundleTy ExeBundle) override {
     assert(Data != nullptr && Bins != nullptr);
     constexpr int MAX_HSZ = 4096;
     const auto GSZ = Gsz_;

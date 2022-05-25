@@ -140,8 +140,8 @@ template <typename T> class Histogramm {
 public:
   using type = T;
   Histogramm(cl::sycl::queue &DeviceQueue) : DeviceQueue_(DeviceQueue) {}
-  virtual EvtRet_t operator()(const T *Data, T *Bins, int NumData,
-                              int NumBins, EBundleTy ExeBundle) = 0;
+  virtual EvtRet_t operator()(const T *Data, T *Bins, int NumData, int NumBins,
+                              EBundleTy ExeBundle) = 0;
   cl::sycl::queue &Queue() { return DeviceQueue_; }
   const cl::sycl::queue &Queue() const { return DeviceQueue_; }
   virtual ~Histogramm() {}
@@ -168,8 +168,8 @@ template <typename T> class HistogrammTester {
   EBundleTy ExeBundle_;
 
 public:
-  HistogrammTester(Histogramm<T> &Hist, const T *Data, int NumData,
-                   int NumBins, EBundleTy ExeBundle)
+  HistogrammTester(Histogramm<T> &Hist, const T *Data, int NumData, int NumBins,
+                   EBundleTy ExeBundle)
       : Hist_(Hist), Data_(Data), NumData_(NumData), NumBins_(NumBins),
         Bins_(NumBins), ExeBundle_(ExeBundle) {}
 

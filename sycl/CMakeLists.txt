@@ -11,7 +11,7 @@
 #
 #------------------------------------------------------------------------------
 #
-#  Useful options:
+#  Macros to control things:
 #  -DUSE_BOOST=1 if you have installed findable boost (for better option parser)
 #  -DRUNHOST=1 run without GPU (SYCL as a host code)
 #  -DMEASURE_NORMAL=1 to measure with reference code

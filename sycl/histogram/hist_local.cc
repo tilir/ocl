@@ -34,8 +34,7 @@ public:
         Lsz_(Cfg.LocSz) {}
 
   sycltesters::EvtRet_t operator()(const T *Data, T *Bins, int NumData,
-                                   int NumBins,
-                                   EBundleTy ExeBundle) override {
+                                   int NumBins, EBundleTy ExeBundle) override {
     assert(Data != nullptr && Bins != nullptr);
     const auto LSZ = Lsz_; // avoid implicit capture of this
     const size_t LMEM = NumBins;

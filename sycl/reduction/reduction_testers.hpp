@@ -5,7 +5,6 @@
 //
 // Macros to control things:
 //  * inherited from testers.hpp: RUNHOST, INORD...
-//  -DMEASURE_NORMAL : measure with normal host code
 //
 // Options to control things:
 // -bsz=<bsz> : block size

@@ -21,7 +21,7 @@
 using ConfigTy = sycltesters::reduce::Config;
 
 // class is used for kernel name
-template <typename T> class hist_naive_buf;
+template <typename T> class reduce_naive_buf;
 
 template <typename T>
 class ReductionNaiveBuf : public sycltesters::Reduction<T> {
@@ -30,8 +30,7 @@ class ReductionNaiveBuf : public sycltesters::Reduction<T> {
   ConfigTy Cfg_;
 
 public:
-  ReductionNaiveBuf(cl::sycl::queue &DeviceQueue, EBundleTy ExeBundle,
-                    ConfigTy Cfg)
+  ReductionNaiveBuf(sycl::queue &DeviceQueue, EBundleTy ExeBundle, ConfigTy Cfg)
       : sycltesters::Reduction<T>(DeviceQueue, ExeBundle), Cfg_(Cfg) {}
 
   sycltesters::EvtRet_t operator()(const T *Data, size_t NumData,
@@ -43,20 +42,20 @@ public:
     sycltesters::EvtVec_t ProfInfo;
 
     // avoid memory allocation with use_host_ptr
-    cl::sycl::buffer<T, 1> BufferData(Data, NumData, {host_ptr});
-    cl::sycl::buffer<T, 1> BufferResults(nullptr, NumRes);
-    cl::sycl::nd_range<1> DataSz{GSZ, LSZ};
+    sycl::buffer<T, 1> BufferData(Data, NumData, {host_ptr});
+    sycl::buffer<T, 1> BufferResults(nullptr, NumRes);
+    sycl::nd_range<1> DataSz{GSZ, LSZ};
     BufferData.set_final_data(nullptr);
 
     auto &DeviceQueue = Queue();
 
-    auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
-      using LTy = cl::sycl::accessor<T, 1, sycl_read_write, sycl_local>;
-      LTy ReductionSums{cl::sycl::range<1>{LSZ}, Cgh};
+    auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
+      using LTy = sycl::accessor<T, 1, sycl_read_write, sycl_local>;
+      LTy ReductionSums{sycl::range<1>{LSZ}, Cgh};
       auto Data = BufferData.template get_access<sycl_read>(Cgh);
       auto Results = BufferResults.template get_access<sycl_write>(Cgh);
 
-      auto KernReduce = [=](cl::sycl::nd_item<1> WorkItem) {
+      auto KernReduce = [=](sycl::nd_item<1> WorkItem) {
         const int N = WorkItem.get_global_id(0);
         const int L = WorkItem.get_local_id(0);
         const int Group = WorkItem.get_group(0);
@@ -74,7 +73,7 @@ public:
           Results[Group] = ReductionSums[0];
       };
 
-      Cgh.parallel_for<class hist_naive_buf<T>>(DataSz, KernReduce);
+      Cgh.parallel_for<class reduce_naive_buf<T>>(DataSz, KernReduce);
     });
 
     ProfInfo.emplace_back(Evt, "Calculating reduction");
@@ -91,6 +90,6 @@ public:
 };
 
 int main(int argc, char **argv) {
-  sycl::kernel_id kid = sycl::get_kernel_id<hist_naive_buf<int>>();
+  sycl::kernel_id kid = sycl::get_kernel_id<reduce_naive_buf<int>>();
   sycltesters::test_sequence<ReductionNaiveBuf<int>>(argc, argv, kid);
 }

@@ -1,5 +1,6 @@
 set(KERNELS
   reduce_naive
+  reduce_object
 )
 
 # build kernels

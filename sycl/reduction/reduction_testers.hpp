@@ -94,27 +94,28 @@ inline Config read_config(int argc, char **argv) {
     std::cout << "Filling with" << Cfg.Val << std::endl;
   if (Cfg.Detailed)
     std::cout << "Detailed events" << std::endl;
+  std::cout.flush();
   return Cfg;
 }
 } // namespace reduce
 
 template <typename T> class Reduction {
-  cl::sycl::queue DeviceQueue_;
+  sycl::queue DeviceQueue_;
   EBundleTy ExeBundle_;
 
 public:
   using type = T;
-  Reduction(cl::sycl::queue &DeviceQueue, EBundleTy ExeBundle)
+  Reduction(sycl::queue &DeviceQueue, EBundleTy ExeBundle)
       : DeviceQueue_(DeviceQueue), ExeBundle_(ExeBundle) {}
   virtual EvtRet_t operator()(const T *Data, size_t NumData, T &Result) = 0;
-  cl::sycl::queue &Queue() { return DeviceQueue_; }
+  sycl::queue &Queue() { return DeviceQueue_; }
   EBundleTy Bundle() const { return ExeBundle_; }
-  const cl::sycl::queue &Queue() const { return DeviceQueue_; }
+  const sycl::queue &Queue() const { return DeviceQueue_; }
   virtual ~Reduction() {}
 };
 
 template <typename T> struct ReductionHost : public Reduction<T> {
-  ReductionHost(cl::sycl::queue &DeviceQueue, EBundleTy ExeBundle)
+  ReductionHost(sycl::queue &DeviceQueue, EBundleTy ExeBundle)
       : Reduction<T>(DeviceQueue, ExeBundle) {}
   EvtRet_t operator()(const T *Data, size_t NumData, T &Result) override {
     Result = std::reduce(Data, Data + NumData);
@@ -144,9 +145,8 @@ public:
 };
 
 template <typename ReductionChildT, typename Ty>
-ReductionTester<Ty> single_reduce_sequence(cl::sycl::queue &Q,
-                                           reduce::Config Cfg, Ty *Data,
-                                           EBundleTy ExeBundle) {
+ReductionTester<Ty> single_reduce_sequence(sycl::queue &Q, reduce::Config Cfg,
+                                           Ty *Data, EBundleTy ExeBundle) {
 #if defined(MEASURE_NORMAL)
   std::cout << "Calculating host" << std::endl;
   ReductionHost<Ty> ReductionHost{Q, ExeBundle}; // both args here unused
@@ -196,16 +196,18 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     EBundleTy ExeBundle = sycl::link(ObjBundle);
 
     std::vector<Ty> Data;
-    std::cout << "Initializing with random" << std::endl;
     Data.resize(Cfg.Sz);
     constexpr Ty MAX_VAL = 10;
-    if (Cfg.ValExists)
+    if (Cfg.ValExists) {
+      std::cout << "Initializing with value = " << Cfg.Val << std::endl;
       std::fill(Data.begin(), Data.end(), Cfg.Val);
-    else
+    } else {
+      std::cout << "Initializing with random" << std::endl;
       rand_initialize(Data.begin(), Data.end(), 0, MAX_VAL);
+    }
     single_reduce_sequence<ReductionChildT>(Q, Cfg, Data.data(), ExeBundle);
 
-  } catch (cl::sycl::exception const &err) {
+  } catch (sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
     abort();
   } catch (std::exception const &err) {

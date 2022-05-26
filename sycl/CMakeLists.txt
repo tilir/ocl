@@ -28,8 +28,8 @@
 #------------------------------------------------------------------------------
 
 # for release measurements try:
-# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DMEASURE_NORMAL=1 -DVERIFY=1 -DCMAKE_BUILD_TYPE=Release ..
-# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release ..
+# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DMEASURE_NORMAL=1 -DVERIFY=1 -DUSE_CIMG=1 -DUSE_MKL=1 ..
+# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DUSE_CIMG=1 -DUSE_MKL=1 ..
 
 cmake_minimum_required(VERSION 3.15)
 project(syclexamples)
@@ -94,6 +94,11 @@ add_subdirectory(histogram)
 
 # reductions
 add_subdirectory(reduction)
+
+# image filtering and samplers
+if(USE_CIMG)
+add_subdirectory(filtering)
+endif()
 
 # dump folder for shader dumps if any
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/dumps)

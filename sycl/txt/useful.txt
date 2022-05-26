@@ -6,3 +6,7 @@ cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release ..
 
 Windows build, measure with host:
 cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DMEASURE_NORMAL=1 -DVERIFY=1 -DCMAKE_BUILD_TYPE=Release ..
+
+VTune magic:
+vtune -collect gpu-hotspots -result-dir res sgemm\matmult_local.exe -ax=10 -by=6 -ay=8 -lsz=16
+vtune -report summary -result-dir res -format html -report-output res/rep.html

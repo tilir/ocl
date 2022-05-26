@@ -285,9 +285,8 @@ void cimg_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
                       drawer::green);
   drawer::disp_buffer(BDisp, TesterB.dataBins(), TesterB.sizeBins(), *BMaxIt,
                       drawer::blue);
-  while (!MainDisp.is_closed()) {
-    cimg_library::cimg::wait(20);
-  }
+  while (!MainDisp.is_closed())
+    cimg_library::cimg::wait(20);  
 }
 #endif
 

@@ -93,7 +93,8 @@ class Filter {
 public:
   Filter(sycl::queue &DeviceQueue, EBundleTy ExeBundle)
       : DeviceQueue_(DeviceQueue), ExeBundle_(ExeBundle) {}
-  virtual EvtRet_t operator()(sycl::image<2> Dst, sycl::image<2> Src) = 0;
+  virtual EvtRet_t operator()(sycl::float4 *DstData, sycl::float4 *SrcData,
+                              int ImW, int ImH) = 0;
   sycl::queue &Queue() { return DeviceQueue_; }
   EBundleTy Bundle() const { return ExeBundle_; }
   const sycl::queue &Queue() const { return DeviceQueue_; }
@@ -103,24 +104,26 @@ public:
 struct FilterHost : public Filter {
   FilterHost(sycl::queue &DeviceQueue, EBundleTy ExeBundle)
       : Filter(DeviceQueue, ExeBundle) {}
-  EvtRet_t operator()(sycl::image<2> Dst, sycl::image<2> Src) override {
-    // ???
+  EvtRet_t operator()(sycl::float4 *DstData, sycl::float4 *SrcData, int ImW,
+                      int ImH) override {
+    std::copy(SrcData, SrcData + ImW * ImH, DstData);
     return {}; // nothing to construct as event
   }
 };
 
 class FilterTester {
-  Filter &Filter_;  
+  Filter &Filter_;
   filter::Config Cfg_;
 
 public:
   FilterTester(Filter &Reduce, filter::Config Cfg)
       : Filter_(Reduce), Cfg_(Cfg) {}
 
-  std::pair<unsigned, unsigned> calculate(sycl::image<2> Dst, sycl::image<2> Src) {
+  std::pair<unsigned, unsigned>
+  calculate(sycl::float4 *DstData, sycl::float4 *SrcData, int ImW, int ImH) {
     Timer Tm;
     Tm.start();
-    EvtRet_t Ret = Filter_(Dst, Src);
+    EvtRet_t Ret = Filter_(DstData, SrcData, ImW, ImH);
     Tm.stop();
     auto EvtTiming = getTime(Ret, Cfg_.Detailed ? false : true);
     return {Tm.elapsed(), EvtTiming};
@@ -132,10 +135,9 @@ constexpr auto sycl_fp32 = sycl::image_channel_type::fp32;
 
 template <typename FilterChildT>
 void single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
-                                      sycl::float4 *Data, int ImW, int ImH,
-                                      EBundleTy ExeBundle) {
-  sycl::range<2> Sizes(ImW, ImH);
-  sycl::image<2> Src(Data, sycl_rgba, sycl_fp32, Sizes);
+                            cimg_library::CImgDisplay &Display,
+                            sycl::float4 *SrcData, int ImW, int ImH,
+                            EBundleTy ExeBundle) {
 
 #if defined(MEASURE_NORMAL)
   std::cout << "Calculating host" << std::endl;
@@ -143,9 +145,8 @@ void single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
   FilterTester TesterH{FilterHost, Cfg};
 
   std::vector<sycl::float4> DstBufferH(ImW * ImH);
-  sycl::image<2> DstH(DstBufferH.data(), sycl_rgba, sycl_fp32, Sizes);
 
-  auto ElapsedH = TesterH.calculate(DstH, Src);
+  auto ElapsedH = TesterH.calculate(DstBufferH.data(), SrcData, ImW, ImH);
   std::cout << "Measured host time: " << ElapsedH.first / msec_per_sec
             << std::endl;
 #endif
@@ -156,23 +157,30 @@ void single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
 
   std::cout << "Calculating gpu" << std::endl;
   std::vector<sycl::float4> DstBufferG(ImW * ImH);
-  sycl::image<2> DstG(DstBufferG.data(), sycl_rgba, sycl_fp32, Sizes);
-  auto Elapsed = Tester.calculate(DstG, Src);
-
+  auto Elapsed = Tester.calculate(DstBufferG.data(), SrcData, ImW, ImH);
   std::cout << "Measured time: " << Elapsed.first / msec_per_sec << std::endl
             << "Pure execution time: " << Elapsed.second / nsec_per_sec
             << std::endl;
 
+  cimg_library::CImg<unsigned char> Img(ImW, ImH, 1, 3, 255);
+  drawer::float4_to_img(DstBufferG.data(), Img);
+  Display.display(Img);
+
 #if defined(MEASURE_NORMAL) && defined(VERIFY)
-  if (DstG != DstH) {
-    std::cout << "Mismatch result: " << std::endl;    
-    std::terminate();
+#if 0
+  // std::mismatch not working (!)
+  auto MisPoint = std::mismatch(DstBufferH.begin(), DstBufferH.end(), DstBufferG.begin());
+  if (MisPoint.first != DstBufferH.end()) {
+    ptrdiff_t I = std::distance(DstBufferH.begin(), MisPoint.first);
+    std::cout << "Mismatch at: " << I << std::endl;    
+    throw std::runtime_error("Mismath");
   }
+#endif
 #endif
 }
 
 template <typename FilterChildT>
-void test_sequence(int argc, char **argv, sycl::kernel_id kid) {  
+void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
   std::cout << "Welcome to imaghe filtering" << std::endl;
 
   try {
@@ -187,13 +195,17 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     EBundleTy ExeBundle = sycl::link(ObjBundle);
 
     std::cout << "Initializing with image: " << Cfg.ImagePath << std::endl;
-    cimg_library::CImg<unsigned char> Image{Cfg.ImagePath.c_str()};
+    cimg_library::CImg<unsigned char> Image(Cfg.ImagePath.c_str());
     const auto ImW = Image.width();
     const auto ImH = Image.height();
-    cimg_library::CImgDisplay MainDisp(Image, "Histogram image source");
+    std::cout << "Range: " << ImW << " x " << ImH << std::endl;
+    cimg_library::CImgDisplay MainDisp(Image, "Filtering image source");
+    cimg_library::CImgDisplay ResultDisp(ImW, ImH, "Filtering image result", 0);
 
     std::vector<sycl::float4> SrcBuffer(ImW * ImH);
-    single_filter_sequence<FilterChildT>(Q, Cfg, SrcBuffer.data(), ImW, ImH, ExeBundle);
+    drawer::img_to_float4(Image, SrcBuffer.data());
+    single_filter_sequence<FilterChildT>(Q, Cfg, ResultDisp, SrcBuffer.data(),
+                                         ImW, ImH, ExeBundle);
     while (!MainDisp.is_closed())
       cimg_library::cimg::wait(20);
   } catch (sycl::exception const &err) {

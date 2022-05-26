@@ -46,7 +46,7 @@ public:
     BufferData.set_final_data(nullptr);
     auto &DeviceQueue = Queue();
 
-    auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
+    auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       auto Data = BufferData.template get_access<sycl_read>(Cgh);
       auto Result = BufferResult.template get_access<sycl_write>(Cgh);
 

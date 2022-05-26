@@ -34,6 +34,7 @@ constexpr auto sycl_atomic = sycl::access::mode::atomic;
 constexpr auto sycl_local = sycl::access::target::local;
 constexpr auto sycl_local_fence = sycl::access::fence_space::local_space;
 constexpr auto sycl_global_fence = sycl::access::fence_space::global_space;
+constexpr auto sycl_image = sycl::access::target::image;
 
 // kernel bundle type aliases
 using IBundleTy = sycl::kernel_bundle<sycl::bundle_state::input>;

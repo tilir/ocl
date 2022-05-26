@@ -236,7 +236,7 @@ HistogrammTester<Ty> single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
     ptrdiff_t I = MisPoint.first - HostData;
     std::cout << "Mismatch at: " << I << std::endl;
     std::cout << *MisPoint.first << " vs " << *MisPoint.second << std::endl;
-    std::terminate();
+    throw std::runtime_error("Mismath");
   }
 #endif
   return Tester;
@@ -286,7 +286,7 @@ void cimg_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
   drawer::disp_buffer(BDisp, TesterB.dataBins(), TesterB.sizeBins(), *BMaxIt,
                       drawer::blue);
   while (!MainDisp.is_closed())
-    cimg_library::cimg::wait(20);  
+    cimg_library::cimg::wait(20);
 }
 #endif
 

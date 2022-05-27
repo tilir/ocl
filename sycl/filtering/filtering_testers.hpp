@@ -70,6 +70,7 @@ constexpr int DEF_LSZ = 32;
 constexpr int DEF_DETAILED = 0;
 constexpr int DEF_IMSZ = 100;
 constexpr int DEF_FILTSZ = 3;
+constexpr int DEF_QUIET = 0;
 
 // min/max for random filter before normalization
 constexpr int MINVAL = -16;
@@ -79,7 +80,8 @@ constexpr int MAXVAL = 16;
 constexpr int NBOXES = 10;
 
 struct Config {
-  bool Detailed, RandImage = false, RandFilter = false, Visualize = true;
+  bool Detailed, RandImage = false, RandFilter = false, Visualize = true,
+                 Quiet = false;
   int LocSz, RandImSz, RandFiltSz;
   std::string ImagePath, FilterPath;
 };
@@ -96,6 +98,7 @@ inline Config read_config(int argc, char **argv) {
   OptParser.template add<int>("detailed", DEF_DETAILED, "detailed event view");
   OptParser.template add<int>("novis", DEF_LSZ,
                               "disable graphic visualization");
+  OptParser.template add<int>("quiet", DEF_QUIET, "quiet mode for bulk runs");
   OptParser.parse(argc, argv);
 
   Cfg.ImagePath = OptParser.template get<std::string>("img");
@@ -108,6 +111,11 @@ inline Config read_config(int argc, char **argv) {
   Cfg.RandImSz = OptParser.template get<int>("randboxes");
   if (OptParser.exists("novis"))
     Cfg.Visualize = false;
+  if (OptParser.exists("quiet")) {
+    Cfg.Quiet = true;
+    Cfg.Visualize = false; // quiet implies novis of course
+    qout.set(Cfg.Quiet);
+  }
   return Cfg;
 }
 
@@ -229,7 +237,15 @@ FilterTester single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
   qout << "Calculating GPU\n";
   auto Elapsed = Tester.calculate(SrcData, Filt);
   qout << "Measured time: " << Elapsed.first / msec_per_sec << "\n";
-  qout << "Pure execution time: " << Elapsed.second / nsec_per_sec << "\n";
+  auto ExecTime = Elapsed.second / nsec_per_sec;
+  qout << "Pure execution time: " << ExecTime << "\n";
+
+  // Quiet mode output: filter size, elapsed time
+  if (Cfg.Quiet) {
+    qout.set(!Cfg.Quiet);
+    qout << Filt.sqrt_size() << " " << ExecTime << "\n";
+    qout.set(Cfg.Quiet);
+  }
 
 #if defined(MEASURE_NORMAL) && defined(VERIFY)
   auto *DataH = TesterH.data();
@@ -273,17 +289,18 @@ drawer::Filter init_filter(filter::Config Cfg) {
   throw std::runtime_error("Need filter");
 }
 
-cimg_library::CImg<unsigned char> init_image(filter::Config Cfg) {
+using ImageTy = cimg_library::CImg<unsigned char>;
+
+ImageTy init_image(filter::Config Cfg) {
   if (!Cfg.ImagePath.empty()) {
     qout << "Initializing with image: " << Cfg.ImagePath << "\n";
-    cimg_library::CImg<unsigned char> Image(Cfg.ImagePath.c_str());
+    ImageTy Image(Cfg.ImagePath.c_str());
     return Image;
   }
 
   if (Cfg.RandImage) {
     qout << "Generating Image with random boxes\n";
-    cimg_library::CImg<unsigned char> Image(Cfg.RandImSz, Cfg.RandImSz, 1, 3,
-                                            255);
+    ImageTy Image(Cfg.RandImSz, Cfg.RandImSz, 1, 3, 255);
     drawer::random_boxes(filter::NBOXES, Image);
     return Image;
   }
@@ -298,7 +315,7 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     qout << "Welcome to image filtering!\n";
     dump_config_info(Cfg);
     auto Q = set_queue();
-    print_info(std::cout, Q.get_device());
+    print_info(qout, Q.get_device());
 
     IBundleTy SrcBundle = sycl::get_kernel_bundle<sycl::bundle_state::input>(
         Q.get_context(), {kid});
@@ -323,7 +340,7 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
       cimg_library::CImgDisplay MainDisp(Image, "Filtering image source");
       cimg_library::CImgDisplay ResDisp(ImW, ImH, "Filtering image result", 0);
 
-      cimg_library::CImg<unsigned char> ResImg(ImW, ImH, 1, 3, 255);
+      ImageTy ResImg(ImW, ImH, 1, 3, 255);
       drawer::float4_to_img(Tester.data(), ResImg);
       ResDisp.display(ResImg);
 

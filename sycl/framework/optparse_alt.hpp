@@ -37,7 +37,10 @@ class Parser final {
 
   // process -help option and illegal cases
   void process_help_notfound(std::string Opt) {
-    if (Opt.find("help") != Opt.npos) {
+    bool IsHelp = (Opt.find("help") != Opt.npos);
+    if (IsHelp || !Values_.count(Opt)) {
+      if (!IsHelp)
+        std::cerr << "ERROR: illegal option detected: " << Opt << std::endl;
       std::cout << "Available options:" << std::endl;
       for (auto &&X : Values_) {
         auto &Name = X.first;
@@ -46,10 +49,6 @@ class Parser final {
                   << ") : " << Desc.description << std::endl;
       }
       exit(0);
-    }
-    if (!Values_.count(Opt)) {
-      std::cout << "option detected: " << Opt << std::endl;
-      throw std::runtime_error("Option not expected, rerun with -help");
     }
     Values_[Opt].exists = true;
   }
@@ -102,7 +101,6 @@ public:
       if (HaveVal)
         Optview.remove_suffix(Optview.size() - TrimPos);
       std::string Opt{Optview};
-      std::cout << "found " << Opt << std::endl;
       process_help_notfound(Opt);
       if (HaveVal) {
         Valview.remove_prefix(TrimPos + 1);

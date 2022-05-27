@@ -114,7 +114,7 @@ public:
   }
 };
 
-inline std::ostream &print_info(std::ostream &Os, sycl::device D) {
+template <typename OsTy> OsTy &print_info(OsTy &Os, sycl::device D) {
   Os << D.template get_info<sycl::info::device::name>() << "\n";
   Os << "Driver version: "
      << D.template get_info<sycl::info::device::driver_version>() << "\n";

@@ -71,11 +71,12 @@ constexpr int DEF_DETAILED = 0;
 constexpr int DEF_IMSZ = 100;
 constexpr int DEF_FILTSZ = 3;
 
-constexpr int MINFILTER = -16;
-constexpr int MAXFILTER = 16;
+// min/max for random filter before normalization
+constexpr int MINVAL = -16;
+constexpr int MAXVAL = 16;
 
 struct Config {
-  bool Detailed, RandImage = false, RandFilter = false;
+  bool Detailed, RandImage = false, RandFilter = false, Visualize = true;
   int LocSz, RandImSz, RandFiltSz;
   std::string ImagePath, FilterPath;
 };
@@ -90,6 +91,8 @@ inline Config read_config(int argc, char **argv) {
                               "random filter (normalized)");
   OptParser.template add<int>("lsz", DEF_LSZ, "local iteration space");
   OptParser.template add<int>("detailed", DEF_DETAILED, "detailed event view");
+  OptParser.template add<int>("novis", DEF_LSZ,
+                              "disable graphic visualization");
   OptParser.parse(argc, argv);
 
   Cfg.ImagePath = OptParser.template get<std::string>("img");
@@ -98,6 +101,8 @@ inline Config read_config(int argc, char **argv) {
   Cfg.Detailed = OptParser.exists("detailed");
   Cfg.RandFilter = OptParser.exists("randfilter");
   Cfg.RandFiltSz = OptParser.template get<int>("randfilter");
+  if (OptParser.exists("novis"))
+    Cfg.Visualize = false;
 
   if (Cfg.LocSz < 1)
     throw std::runtime_error("Wrong parameters (expect all sizes >= 1)");
@@ -112,6 +117,8 @@ inline Config read_config(int argc, char **argv) {
   std::cout << "Local size: " << Cfg.LocSz << std::endl;
   if (Cfg.Detailed)
     std::cout << "Detailed events" << std::endl;
+  if (Cfg.Visualize)
+    std::cout << "Screen visualization" << std::endl;
   std::cout.flush();
   return Cfg;
 }
@@ -148,17 +155,19 @@ struct FilterHost : public Filter {
           for (int J = -HalfWidth; J <= HalfWidth; ++J) {
             // int FiltIndex = (I + HalfWidth) * FiltSize + (J + HalfWidth);
             // first changed index is X
+            sycl::float4 Pixel = {0.0f, 0.0f, 0.0f, 0.0f};
             int X = Column + J;
+            int Y = Row + I;
             if (X < 0)
               X = 0;
-            if (X > ImW - 1)
+            else if (X > ImW - 1)
               X = ImW - 1;
-            int Y = Row + I;
-            if (Y < 0)
+            else if (Y < 0)
               Y = 0;
-            if (Y > ImH - 1)
+            else if (Y > ImH - 1)
               Y = ImH - 1;
-            sycl::float4 Pixel = SrcData[Y * ImW + X];
+            else
+              Pixel = SrcData[Y * ImW + X];
             Sum[0] += Pixel[0] * FiltPtr[FiltIndex];
             Sum[1] += Pixel[1] * FiltPtr[FiltIndex];
             Sum[2] += Pixel[2] * FiltPtr[FiltIndex];
@@ -218,14 +227,13 @@ FilterTester single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
             << std::endl;
 
 #if defined(MEASURE_NORMAL) && defined(VERIFY)
-#if 0 // yet not perfect
   auto *DataH = TesterH.data();
   auto *DataG = Tester.data();
   for (int Row = 0; Row < ImH; ++Row)
     for (int Column = 0; Column < ImW; ++Column) {
       sycl::float4 H = DataH[Row * ImW + Column];
       sycl::float4 G = DataG[Row * ImW + Column];
-      if (!sycl::all(H == G)) {
+      if (!sycl::all(H - G < 0.0001f)) {
         std::cout << "Mismatch at: (" << Column << ", " << Row << ")"
                   << std::endl;
         std::cout << "Host: [" << H[0] << ", " << H[1] << ", " << H[2] << ", "
@@ -235,7 +243,6 @@ FilterTester single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
         throw std::runtime_error("Mismath");
       }
     }
-#endif
 #endif
   return Tester;
 }
@@ -271,26 +278,29 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
       std::cout << "N = " << Filt.sqrt_size() << std::endl;
     } else if (Cfg.RandFilter) {
       std::cout << "Generating filter" << std::endl;
-      Filt =
-          drawer::Filter(Cfg.RandFiltSz, filter::MINFILTER, filter::MAXFILTER);
+      Filt = drawer::Filter(Cfg.RandFiltSz, filter::MINVAL, filter::MAXVAL);
       std::cout << "N = " << Filt.sqrt_size() << std::endl;
-      sycltesters::visualize_seq(Filt.data(),
-                                 Filt.data() + Cfg.RandFiltSz * Cfg.RandFiltSz,
-                                 std::cout);
+#ifdef SHOWFILT
+      auto DataSz = Cfg.RandFiltSz * Cfg.RandFiltSz;
+      sycltesters::visualize_seq(Filt.data(), Filt.data() + DataSz, std::cout);
+#endif
     }
 
     auto Tester = single_filter_sequence<FilterChildT>(
         Q, Cfg, SrcBuffer.data(), ImW, ImH, Filt, ExeBundle);
 
-    cimg_library::CImgDisplay MainDisp(Image, "Filtering image source");
-    cimg_library::CImgDisplay ResultDisp(ImW, ImH, "Filtering image result", 0);
+    // display source and result pictures
+    if (Cfg.Visualize) {
+      cimg_library::CImgDisplay MainDisp(Image, "Filtering image source");
+      cimg_library::CImgDisplay ResDisp(ImW, ImH, "Filtering image result", 0);
 
-    cimg_library::CImg<unsigned char> ResImg(ImW, ImH, 1, 3, 255);
-    drawer::float4_to_img(Tester.data(), ResImg);
-    ResultDisp.display(ResImg);
+      cimg_library::CImg<unsigned char> ResImg(ImW, ImH, 1, 3, 255);
+      drawer::float4_to_img(Tester.data(), ResImg);
+      ResDisp.display(ResImg);
 
-    while (!MainDisp.is_closed())
-      cimg_library::cimg::wait(20);
+      while (!MainDisp.is_closed())
+        cimg_library::cimg::wait(20);
+    }
   } catch (sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
     abort();

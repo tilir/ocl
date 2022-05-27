@@ -43,12 +43,13 @@ void disp_buffer(cimg_library::CImgDisplay &Display, T *Buf, int Width,
   Img.display(Display);
 }
 
+constexpr float Normalize = 255.0f;
+
 // CImg to float4 array
 inline void img_to_float4(cimg_library::CImg<unsigned char> &Img,
                           sycl::float4 *Buf) {
-  const double Normalize = 255.0;
-  for (int X = 0; X < Img.width(); X++)
-    for (int Y = 0; Y < Img.height(); Y++) {
+  for (int Y = 0; Y < Img.height(); Y++)
+    for (int X = 0; X < Img.width(); X++) {
       sycl::float4 Data(Img(X, Y, 0, 0) / Normalize,
                         Img(X, Y, 0, 1) / Normalize,
                         Img(X, Y, 0, 2) / Normalize, 0.0);
@@ -56,17 +57,47 @@ inline void img_to_float4(cimg_library::CImg<unsigned char> &Img,
     }
 }
 
+inline unsigned char clamp_uchar(float f) {
+  if (f <= 0.0)
+    return 0;
+  if (f >= 255.0)
+    return 255;
+  return static_cast<unsigned char>(f);
+}
+
 // float4 array to CImg
 inline void float4_to_img(sycl::float4 *Buf,
                           cimg_library::CImg<unsigned char> &Img) {
-  const double Normalize = 255.0;
-  for (int X = 0; X < Img.width(); X++)
-    for (int Y = 0; Y < Img.height(); Y++) {
+  for (int Y = 0; Y < Img.height(); Y++)
+    for (int X = 0; X < Img.width(); X++) {
       sycl::float4 Data = *Buf++;
-      Img(X, Y, 0, 0) = static_cast<unsigned char>(Data.x() * Normalize);
-      Img(X, Y, 0, 1) = static_cast<unsigned char>(Data.y() * Normalize);
-      Img(X, Y, 0, 2) = static_cast<unsigned char>(Data.z() * Normalize);
+      Img(X, Y, 0, 0) = clamp_uchar(Data[0] * Normalize);
+      Img(X, Y, 0, 1) = clamp_uchar(Data[1] * Normalize);
+      Img(X, Y, 0, 2) = clamp_uchar(Data[2] * Normalize);
     }
 }
+
+// 2D convolution kernel
+class Filter {
+  int N;
+  std::vector<float> Data;
+
+public:
+  Filter(std::string FilterPath) {
+    std::ifstream Is(FilterPath);
+    Is.exceptions(std::istream::failbit);
+    float NormVal;
+    Is >> N;
+    Is >> NormVal;
+    Data.resize(N * N);
+    for (int I = 0; I < N * N; ++I) {
+      float Val;
+      Is >> Val;
+      Data[I] = Val / NormVal;
+    }
+  }
+  int sqrt_size() const { return N; }
+  const float *data() const { return Data.data(); }
+};
 
 } // namespace drawer

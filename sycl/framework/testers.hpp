@@ -21,8 +21,10 @@
 #include <iterator>
 #include <vector>
 
-#include "dice.hpp"
 #include <CL/sycl.hpp>
+
+#include "dice.hpp"
+#include "qstream.hpp"
 
 // access modes
 constexpr auto sycl_read = sycl::access::mode::read;
@@ -135,23 +137,23 @@ inline unsigned getTime(EvtRet_t Opt, bool Quiet = true) {
   if (!Opt.has_value())
     return AccTime;
   auto &&Evts = Opt.value();
+  auto Old = qout.silence(Quiet);
   for (auto &&NEvt : Evts) {
     sycl::event &Evt = NEvt.Evt_;
-    if (!Quiet)
-      std::cout << EvtIdx++ << " (" << NEvt.Name_ << "): ";
+    qout << EvtIdx++ << " (" << NEvt.Name_ << "): ";
     sycl::info::event_command_status EStatus =
         Evt.template get_info<EvtStatus>();
     if (EStatus != EvtComplete) {
-      if (!Quiet)
-        std::cout << " [...] ";
+      qout << " [...] ";
       Evt.wait();
     }
     auto Start = Evt.template get_profiling_info<EvtStart>();
     auto End = Evt.template get_profiling_info<EvtEnd>();
-    if (!Quiet)
-      std::cout << ((End - Start) / nsec_per_sec) << std::endl;
-    AccTime += End - Start;
+    auto Elapsed = End - Start;
+    qout << Elapsed / nsec_per_sec << "\n";
+    AccTime += Elapsed;
   }
+  qout = QuietStream{Old};
   return AccTime;
 }
 

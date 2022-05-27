@@ -19,22 +19,25 @@
 #include <chrono>
 #include <iostream>
 #include <iterator>
-#include <random>
 #include <vector>
 
+#include "dice.hpp"
 #include <CL/sycl.hpp>
 
-// sycl access mode synonyms
+// access modes
 constexpr auto sycl_read = sycl::access::mode::read;
 constexpr auto sycl_write = sycl::access::mode::write;
 constexpr auto sycl_read_write = sycl::access::mode::read_write;
 constexpr auto sycl_atomic = sycl::access::mode::atomic;
 
-// local target and fence aliases
+// targets for accessors
 constexpr auto sycl_local = sycl::access::target::local;
+constexpr auto sycl_constant = cl::sycl::access::target::constant_buffer;
+constexpr auto sycl_image = sycl::access::target::image;
+
+// fences
 constexpr auto sycl_local_fence = sycl::access::fence_space::local_space;
 constexpr auto sycl_global_fence = sycl::access::fence_space::global_space;
-constexpr auto sycl_image = sycl::access::target::image;
 
 // kernel bundle type aliases
 using IBundleTy = sycl::kernel_bundle<sycl::bundle_state::input>;
@@ -169,23 +172,6 @@ inline sycl::queue set_queue() {
   sycl::default_selector Sel;
   sycl::queue Q{Sel, Exception_handler, PropList};
   return Q;
-}
-
-struct Dice {
-  std::uniform_int_distribution<int> Uid;
-
-  Dice(int Min, int Max) : Uid(Min, Max) {}
-  int operator()() {
-    static std::random_device Rd;
-    static std::mt19937 Rng{Rd()};
-    return Uid(Rng);
-  }
-};
-
-template <typename It>
-void rand_initialize(It Begin, It End, int Min, int Max) {
-  Dice D(Min, Max);
-  std::generate(Begin, End, [&] { return D(); });
 }
 
 template <typename It, typename Os>

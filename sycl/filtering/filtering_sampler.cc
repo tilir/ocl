@@ -38,20 +38,22 @@ public:
     sycltesters::EvtVec_t ProfInfo;
     sycl::range<2> Dims(ImW, ImH);
     auto &DeviceQueue = Queue();
-    sycl::image<2> Dst(DstData, sycltesters::sycl_rgba, sycltesters::sycl_fp32,
-                       Dims);
-    sycl::image<2> Src(SrcData, sycltesters::sycl_rgba, sycltesters::sycl_fp32,
-                       Dims);
+    sycl::image<2> Dst(DstData, sycl_rgba, sycl_fp32, Dims);
+    sycl::image<2> Src(SrcData, sycl_rgba, sycl_fp32, Dims);
     int FiltSize = Filt.sqrt_size();
+    int DataSize = FiltSize * FiltSize;
     int HalfWidth = FiltSize / 2;
-    cl::sycl::buffer<float, 1> FiltData(Filt.data(), FiltSize * FiltSize,
-                                        {host_ptr});
+    sycl::buffer<float, 1> FiltData(Filt.data(), DataSize, {host_ptr});
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       using ImAccTy = sycl::accessor<sycl::float4, 2, sycl_read, sycl_image>;
-      ImAccTy InPtr(Src, Cgh);
-      auto OutPtr = Dst.template get_access<sycl::float4, sycl_write>(Cgh);
-      auto FiltPtr = FiltData.template get_access<sycl_read>(Cgh);
+      using ImWriteTy = sycl::accessor<sycl::float4, 2, sycl_write, sycl_image>;
+      using FiltAccTy = sycl::accessor<float, 1, sycl_read, sycl_constant>;
+      ImAccTy InPtr(Src, Cgh);          // image to read from
+      ImWriteTy OutPtr(Dst, Cgh);       // image to write to
+      FiltAccTy FiltPtr(FiltData, Cgh); // global constant filter data
+
+      // sampler for image read
       sycl::sampler Sampler(sycl::coordinate_normalization_mode::unnormalized,
                             sycl::addressing_mode::clamp,
                             sycl::filtering_mode::nearest);

@@ -13,11 +13,15 @@
 #pragma once
 
 #include <CL/sycl.hpp>
+#include <algorithm>
+#include <numeric>
 
 // clang-format off
 #define cimg_use_jpeg
 #include "CImg.h"
 // clang-format on
+
+#include "dice.hpp"
 
 namespace drawer {
 
@@ -83,6 +87,18 @@ class Filter {
   std::vector<float> Data;
 
 public:
+  Filter() : N(0) {}
+
+  // random filter
+  Filter(int RandSz, int MinFilt, int MaxFilt) : N(RandSz), Data(N * N) {
+    sycltesters::rand_initialize(Data.begin(), Data.end(), MinFilt, MaxFilt);
+    float NormVal = std::reduce(Data.begin(), Data.end());
+    if (abs(NormVal) > 1.0)
+      std::transform(Data.begin(), Data.end(), Data.begin(),
+                     [NormVal](auto Elt) { return Elt / NormVal; });
+  }
+
+  // load from file
   Filter(std::string FilterPath) {
     std::ifstream Is(FilterPath);
     Is.exceptions(std::istream::failbit);

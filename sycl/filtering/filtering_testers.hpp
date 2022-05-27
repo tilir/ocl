@@ -113,7 +113,36 @@ struct FilterHost : public Filter {
       : Filter(DeviceQueue, ExeBundle) {}
   EvtRet_t operator()(sycl::float4 *DstData, sycl::float4 *SrcData, int ImW,
                       int ImH, drawer::Filter &Filt) override {
-    std::copy(SrcData, SrcData + ImW * ImH, DstData);
+    auto *FiltPtr = Filt.data();
+    int FiltSize = Filt.sqrt_size();
+    int HalfWidth = FiltSize / 2;
+    for (int Row = 0; Row < ImH; ++Row)
+      for (int Column = 0; Column < ImW; ++Column) {
+        sycl::float4 Sum = {0.0f, 0.0f, 0.0f, 1.0f};
+        int FiltIndex = 0;
+        for (int I = -HalfWidth; I <= HalfWidth; ++I) {
+          for (int J = -HalfWidth; J <= HalfWidth; ++J) {
+            // int FiltIndex = (I + HalfWidth) * FiltSize + (J + HalfWidth);
+            // first changed index is X
+            int X = Column + J;
+            if (X < 0)
+              X = 0;
+            if (X > ImW - 1)
+              X = ImW - 1;
+            int Y = Row + I;
+            if (Y < 0)
+              Y = 0;
+            if (Y > ImH - 1)
+              Y = ImH - 1;
+            sycl::float4 Pixel = SrcData[Y * ImW + X];
+            Sum[0] += Pixel[0] * FiltPtr[FiltIndex];
+            Sum[1] += Pixel[1] * FiltPtr[FiltIndex];
+            Sum[2] += Pixel[2] * FiltPtr[FiltIndex];
+            FiltIndex += 1;
+          }
+        }
+        DstData[Row * ImW + Column] = Sum;
+      }
     return {}; // nothing to construct as event
   }
 };
@@ -152,12 +181,10 @@ void single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
   FilterHost FilterHost{Q, ExeBundle}; // both args here unused
   FilterTester TesterH{FilterHost, Cfg};
 
-#if 0
   std::vector<sycl::float4> DstBufferH(ImW * ImH);
   auto ElapsedH = TesterH.calculate(DstBufferH.data(), SrcData, ImW, ImH, Filt);
   std::cout << "Measured host time: " << ElapsedH.first / msec_per_sec
             << std::endl;
-#endif
 #endif
 
   FilterChildT FilterGPU{Q, ExeBundle, Cfg};
@@ -165,32 +192,32 @@ void single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
   FilterTester Tester{FilterGPU, Cfg};
 
   std::cout << "Calculating gpu" << std::endl;
-#if 1
   std::vector<sycl::float4> DstBufferG(ImW * ImH);
   auto Elapsed = Tester.calculate(DstBufferG.data(), SrcData, ImW, ImH, Filt);
-#else
-  ImW = 3;
-  ImH = 4;
-  std::vector<sycl::float4> SrcBufferG(ImW * ImH);
-  std::vector<sycl::float4> DstBufferG(ImW * ImH);
+
+// simple visualization of how filter works on some numeric data
+#if defined(IOTATEST)
+  ImW = 6;
+  ImH = 9;
+  std::vector<sycl::float4> SrcBufferI(ImW * ImH);
+  std::vector<sycl::float4> DstBufferI(ImW * ImH);
   for (int i = 0; i < ImW * ImH; ++i)
-    SrcBufferG[i][0] = i;
+    SrcBufferI[i][0] = i;
 
   std::cout << "before:\n";
   for (int i = 0; i < ImH; ++i) {
     for (int j = 0; j < ImW; ++j)
-      std::cout << SrcBufferG[i * ImW + j][0] << " ";
+      std::cout << SrcBufferI[i * ImW + j][0] << " ";
     std::cout << "\n";
   }
   auto Elapsed =
-      Tester.calculate(DstBufferG.data(), SrcBufferG.data(), ImW, ImH, Filt);
+      Tester.calculate(DstBufferI.data(), SrcBufferI.data(), ImW, ImH, Filt);
   std::cout << "after:\n";
   for (int i = 0; i < ImH; ++i) {
     for (int j = 0; j < ImW; ++j)
-      std::cout << DstBufferG[i * ImW + j][0] << " ";
+      std::cout << SrcBufferI[i * ImW + j][0] << " ";
     std::cout << "\n";
   }
-  return;
 #endif
 
   std::cout << "Measured time: " << Elapsed.first / msec_per_sec << std::endl
@@ -202,15 +229,20 @@ void single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
   Display.display(Img);
 
 #if defined(MEASURE_NORMAL) && defined(VERIFY)
-#if 0
-  // std::mismatch not working (!)
-  auto MisPoint = std::mismatch(DstBufferH.begin(), DstBufferH.end(), DstBufferG.begin());
-  if (MisPoint.first != DstBufferH.end()) {
-    ptrdiff_t I = std::distance(DstBufferH.begin(), MisPoint.first);
-    std::cout << "Mismatch at: " << I << std::endl;    
-    throw std::runtime_error("Mismath");
-  }
-#endif
+  for (int Row = 0; Row < ImH; ++Row)
+    for (int Column = 0; Column < ImW; ++Column) {
+      sycl::float4 H = DstBufferH[Row * ImW + Column];
+      sycl::float4 G = DstBufferH[Row * ImW + Column];
+      if (!sycl::all(H == G)) {
+        std::cout << "Mismatch at: (" << Column << ", " << Row << ")"
+                  << std::endl;
+        std::cout << "Host: [" << H[0] << ", " << H[1] << ", " << H[2] << ", "
+                  << H[3] << "]" << std::endl;
+        std::cout << "GPU: [" << G[0] << ", " << G[1] << ", " << G[2] << ", "
+                  << G[3] << "]" << std::endl;
+        throw std::runtime_error("Mismath");
+      }
+    }
 #endif
 }
 
@@ -234,9 +266,7 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     const auto ImW = Image.width();
     const auto ImH = Image.height();
     std::cout << "Range: " << ImW << " x " << ImH << std::endl;
-#if 1
     cimg_library::CImgDisplay MainDisp(Image, "Filtering image source");
-#endif
     cimg_library::CImgDisplay ResultDisp(ImW, ImH, "Filtering image result", 0);
 
     std::vector<sycl::float4> SrcBuffer(ImW * ImH);
@@ -248,10 +278,8 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
 
     single_filter_sequence<FilterChildT>(Q, Cfg, ResultDisp, SrcBuffer.data(),
                                          ImW, ImH, Filt, ExeBundle);
-#if 1
     while (!MainDisp.is_closed())
       cimg_library::cimg::wait(20);
-#endif
   } catch (sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
     abort();

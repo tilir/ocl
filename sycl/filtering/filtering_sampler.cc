@@ -87,14 +87,6 @@ public:
 };
 
 int main(int argc, char **argv) {
-#if 0
-  auto ids = sycl::get_kernel_ids();
-  sycl::kernel_id kid = ids[0];
-  std::cout << "Registered kernels:\n";
-  for (auto elt : ids)
-    std::cout << elt.get_name() << std::endl;
-#endif
   sycl::kernel_id kid = sycl::get_kernel_id<class filter_2d>();
-
   sycltesters::test_sequence<FilterSampler>(argc, argv, kid);
 }

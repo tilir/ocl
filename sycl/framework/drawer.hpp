@@ -52,7 +52,7 @@ inline void img_to_float4(cimg_library::CImg<unsigned char> &Img,
     for (int X = 0; X < Img.width(); X++) {
       sycl::float4 Data(Img(X, Y, 0, 0) / Normalize,
                         Img(X, Y, 0, 1) / Normalize,
-                        Img(X, Y, 0, 2) / Normalize, 0.0);
+                        Img(X, Y, 0, 2) / Normalize, 0.0f);
       *Buf++ = Data;
     }
 }

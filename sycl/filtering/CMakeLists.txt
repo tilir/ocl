@@ -1,6 +1,7 @@
 set(KERNELS
   filtering_sampler
   filtering_sampler_vectorized
+  filtering_buffer
 )
 
 # build kernels

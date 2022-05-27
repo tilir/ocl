@@ -33,6 +33,7 @@ constexpr auto sycl_read_write = sycl::access::mode::read_write;
 constexpr auto sycl_atomic = sycl::access::mode::atomic;
 
 // targets for accessors
+constexpr auto sycl_global = sycl::access::target::device;
 constexpr auto sycl_local = sycl::access::target::local;
 constexpr auto sycl_constant = cl::sycl::access::target::constant_buffer;
 constexpr auto sycl_image = sycl::access::target::image;

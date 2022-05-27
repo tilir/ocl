@@ -5,10 +5,12 @@
 * cmake for cmake modules
 * framework for common utilities
 * named folders for different kernels
-  * vadd for vector add and friends
-  * sgemm for matrix multiplications
   * bitonic for bitonic sorts
   * histogram for different histograms
+  * filtering for convolution 2d
+  * reduction for different reductions
+  * sgemm for matrix multiplications
+  * vadd for vector add and friends
 * scripts for ruby and gnuplot scripts
 * txt for textual notes
 

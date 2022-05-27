@@ -81,6 +81,21 @@ inline void float4_to_img(sycl::float4 *Buf,
     }
 }
 
+// put N random boxes, uniformly distributed
+inline void random_boxes(int N, cimg_library::CImg<unsigned char> &Img) {
+  int ImH = Img.height();
+  int ImW = Img.width();
+
+  sycltesters::Dice DH(0, ImH - 1), DW(0, ImW - 1), DC(0, 255);
+  for (int I = 0; I < N; ++I) {
+    unsigned char color[3] = {DC(), DC(), DC()};
+    int X0 = DW(), X1 = DW(), Y0 = DH(), Y1 = DH();
+    int XU = std::min(X0, X1), XD = std::max(X0, X1);
+    int YU = std::min(Y0, Y1), YD = std::max(Y0, Y1);
+    Img.draw_rectangle(XU, YU, XD, YD, color);
+  }
+}
+
 // 2D convolution kernel
 class Filter {
   int N;

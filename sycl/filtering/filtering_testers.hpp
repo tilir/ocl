@@ -75,6 +75,9 @@ constexpr int DEF_FILTSZ = 3;
 constexpr int MINVAL = -16;
 constexpr int MAXVAL = 16;
 
+// number of random boxes
+constexpr int NBOXES = 10;
+
 struct Config {
   bool Detailed, RandImage = false, RandFilter = false, Visualize = true;
   int LocSz, RandImSz, RandFiltSz;
@@ -101,9 +104,14 @@ inline Config read_config(int argc, char **argv) {
   Cfg.Detailed = OptParser.exists("detailed");
   Cfg.RandFilter = OptParser.exists("randfilter");
   Cfg.RandFiltSz = OptParser.template get<int>("randfilter");
+  Cfg.RandImage = OptParser.exists("randboxes");
+  Cfg.RandImSz = OptParser.template get<int>("randboxes");
   if (OptParser.exists("novis"))
     Cfg.Visualize = false;
+  return Cfg;
+}
 
+inline void dump_config_info(Config &Cfg) {
   if (Cfg.LocSz < 1)
     throw std::runtime_error("Wrong parameters (expect all sizes >= 1)");
 
@@ -113,15 +121,14 @@ inline Config read_config(int argc, char **argv) {
   if (!Cfg.RandFilter && Cfg.FilterPath.empty())
     throw std::runtime_error("You need to specify filter");
 
-  std::cout << "Image path: " << Cfg.ImagePath << std::endl;
-  std::cout << "Local size: " << Cfg.LocSz << std::endl;
+  qout << "Image path: " << Cfg.ImagePath << "\n";
+  qout << "Local size: " << Cfg.LocSz << "\n";
   if (Cfg.Detailed)
-    std::cout << "Detailed events" << std::endl;
+    qout << "Detailed events\n";
   if (Cfg.Visualize)
-    std::cout << "Screen visualization" << std::endl;
-  std::cout.flush();
-  return Cfg;
+    qout << "Screen visualization\n";
 }
+
 } // namespace filter
 
 class Filter {
@@ -210,21 +217,19 @@ FilterTester single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
                                     drawer::Filter &Filt, EBundleTy ExeBundle) {
 
 #if defined(MEASURE_NORMAL)
-  std::cout << "Calculating host" << std::endl;
+  qout << "Calculating host\n";
   FilterHost FilterHost{Q, ExeBundle}; // both args here unused
   FilterTester TesterH{FilterHost, Cfg, ImW, ImH};
   auto ElapsedH = TesterH.calculate(SrcData, Filt);
-  std::cout << "Measured host time: " << ElapsedH.first / msec_per_sec
-            << std::endl;
+  qout << "Measured host time: " << ElapsedH.first / msec_per_sec << "\n";
 #endif
 
   FilterChildT FilterGPU{Q, ExeBundle, Cfg};
   FilterTester Tester{FilterGPU, Cfg, ImW, ImH};
-  std::cout << "Calculating gpu" << std::endl;
+  qout << "Calculating GPU\n";
   auto Elapsed = Tester.calculate(SrcData, Filt);
-  std::cout << "Measured time: " << Elapsed.first / msec_per_sec << std::endl
-            << "Pure execution time: " << Elapsed.second / nsec_per_sec
-            << std::endl;
+  qout << "Measured time: " << Elapsed.first / msec_per_sec << "\n";
+  qout << "Pure execution time: " << Elapsed.second / nsec_per_sec << "\n";
 
 #if defined(MEASURE_NORMAL) && defined(VERIFY)
   auto *DataH = TesterH.data();
@@ -234,12 +239,11 @@ FilterTester single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
       sycl::float4 H = DataH[Row * ImW + Column];
       sycl::float4 G = DataG[Row * ImW + Column];
       if (!sycl::all(H - G < 0.0001f)) {
-        std::cout << "Mismatch at: (" << Column << ", " << Row << ")"
-                  << std::endl;
-        std::cout << "Host: [" << H[0] << ", " << H[1] << ", " << H[2] << ", "
-                  << H[3] << "]" << std::endl;
-        std::cout << "GPU: [" << G[0] << ", " << G[1] << ", " << G[2] << ", "
-                  << G[3] << "]" << std::endl;
+        qout << "Mismatch at: (" << Column << ", " << Row << ")\n";
+        qout << "Host: [" << H[0] << ", " << H[1] << ", " << H[2] << ", "
+             << H[3] << "]\n";
+        qout << "GPU: [" << G[0] << ", " << G[1] << ", " << G[2] << ", " << G[3]
+             << "]\n";
         throw std::runtime_error("Mismath");
       }
     }
@@ -247,12 +251,52 @@ FilterTester single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
   return Tester;
 }
 
+drawer::Filter init_filter(filter::Config Cfg) {
+  if (!Cfg.FilterPath.empty()) {
+    qout << "Reading filter: " << Cfg.FilterPath << "\n";
+    drawer::Filter Filt(Cfg.FilterPath);
+    qout << "N = " << Filt.sqrt_size() << "\n";
+    return Filt;
+  }
+
+  if (Cfg.RandFilter) {
+    qout << "Generating filter\n";
+    drawer::Filter Filt(Cfg.RandFiltSz, filter::MINVAL, filter::MAXVAL);
+    qout << "N = " << Filt.sqrt_size() << "\n";
+#ifdef SHOWFILT
+    auto DataSz = Cfg.RandFiltSz * Cfg.RandFiltSz;
+    sycltesters::visualize_seq(Filt.data(), Filt.data() + DataSz, std::cout);
+#endif
+    return Filt;
+  }
+
+  throw std::runtime_error("Need filter");
+}
+
+cimg_library::CImg<unsigned char> init_image(filter::Config Cfg) {
+  if (!Cfg.ImagePath.empty()) {
+    qout << "Initializing with image: " << Cfg.ImagePath << "\n";
+    cimg_library::CImg<unsigned char> Image(Cfg.ImagePath.c_str());
+    return Image;
+  }
+
+  if (Cfg.RandImage) {
+    qout << "Generating Image with random boxes\n";
+    cimg_library::CImg<unsigned char> Image(Cfg.RandImSz, Cfg.RandImSz, 1, 3,
+                                            255);
+    drawer::random_boxes(filter::NBOXES, Image);
+    return Image;
+  }
+
+  throw std::runtime_error("Need image");
+}
+
 template <typename FilterChildT>
 void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
-  std::cout << "Welcome to imaghe filtering" << std::endl;
-
   try {
     auto Cfg = filter::read_config(argc, argv);
+    qout << "Welcome to image filtering!\n";
+    dump_config_info(Cfg);
     auto Q = set_queue();
     print_info(std::cout, Q.get_device());
 
@@ -262,29 +306,14 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     OBundleTy ObjBundle = sycl::compile(SrcBundle);
     EBundleTy ExeBundle = sycl::link(ObjBundle);
 
-    std::cout << "Initializing with image: " << Cfg.ImagePath << std::endl;
-    cimg_library::CImg<unsigned char> Image(Cfg.ImagePath.c_str());
+    auto Image = init_image(Cfg);
     const auto ImW = Image.width();
     const auto ImH = Image.height();
-    std::cout << "Range: " << ImW << " x " << ImH << std::endl;
-
+    qout << "Range: " << ImW << " x " << ImH << "\n";
     std::vector<sycl::float4> SrcBuffer(ImW * ImH);
     drawer::img_to_float4(Image, SrcBuffer.data());
 
-    drawer::Filter Filt;
-    if (!Cfg.FilterPath.empty()) {
-      std::cout << "Reading filter: " << Cfg.FilterPath << std::endl;
-      Filt = drawer::Filter(Cfg.FilterPath);
-      std::cout << "N = " << Filt.sqrt_size() << std::endl;
-    } else if (Cfg.RandFilter) {
-      std::cout << "Generating filter" << std::endl;
-      Filt = drawer::Filter(Cfg.RandFiltSz, filter::MINVAL, filter::MAXVAL);
-      std::cout << "N = " << Filt.sqrt_size() << std::endl;
-#ifdef SHOWFILT
-      auto DataSz = Cfg.RandFiltSz * Cfg.RandFiltSz;
-      sycltesters::visualize_seq(Filt.data(), Filt.data() + DataSz, std::cout);
-#endif
-    }
+    drawer::Filter Filt = init_filter(Cfg);
 
     auto Tester = single_filter_sequence<FilterChildT>(
         Q, Cfg, SrcBuffer.data(), ImW, ImH, Filt, ExeBundle);
@@ -311,7 +340,7 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     std::cerr << "Unknown error\n";
     abort();
   }
-  std::cout << "Everything is correct" << std::endl;
+  qout << "Everything is correct\n";
 }
 
 } // namespace sycltesters

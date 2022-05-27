@@ -137,7 +137,7 @@ inline unsigned getTime(EvtRet_t Opt, bool Quiet = true) {
   if (!Opt.has_value())
     return AccTime;
   auto &&Evts = Opt.value();
-  auto Old = qout.silence(Quiet);
+  auto Old = qout.set(Quiet);
   for (auto &&NEvt : Evts) {
     sycl::event &Evt = NEvt.Evt_;
     qout << EvtIdx++ << " (" << NEvt.Name_ << "): ";
@@ -153,7 +153,7 @@ inline unsigned getTime(EvtRet_t Opt, bool Quiet = true) {
     qout << Elapsed / nsec_per_sec << "\n";
     AccTime += Elapsed;
   }
-  qout = QuietStream{Old};
+  qout.set(Old);
   return AccTime;
 }
 

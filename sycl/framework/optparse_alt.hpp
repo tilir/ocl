@@ -48,6 +48,8 @@ class Parser final {
         std::cout << ("-" + Name) << "( = " << Desc.value
                   << ") : " << Desc.description << std::endl;
       }
+      if (!IsHelp)
+        std::terminate();
       exit(0);
     }
     Values_[Opt].exists = true;

@@ -31,11 +31,50 @@
 
 #include "testers.hpp"
 
-// defaults
-constexpr int LIST_SIZE = 1024 * 2;
-constexpr int NREPS = 10;
-
 namespace sycltesters {
+
+namespace vadd {
+
+constexpr int BLOCK_SIZE = 256;
+constexpr int LIST_SIZE = 1024;
+constexpr int NREPS = 10;
+constexpr int DEF_DETAILED = 0;
+constexpr int DEF_QUIET = 0;
+
+struct Config {
+  bool Detailed, Quiet = false;
+  int Bsz, Size, NReps;
+};
+
+inline Config read_config(int argc, char **argv) {
+  Config Cfg;
+  options::Parser OptParser;
+  OptParser.template add<int>("bsz", BLOCK_SIZE, "size of block");
+  OptParser.template add<int>("size", LIST_SIZE,
+                              "size of vectors in bsz-units");
+  OptParser.template add<int>("nreps", NREPS,
+                              "number of repetitions in tester loop");
+  OptParser.template add<int>("detailed", DEF_DETAILED, "detailed event view");
+  OptParser.template add<int>("quiet", DEF_QUIET, "quiet mode for bulk runs");
+  OptParser.parse(argc, argv);
+
+  Cfg.Bsz = OptParser.template get<int>("size");
+  Cfg.Size = OptParser.template get<int>("size") * Cfg.Bsz;
+  Cfg.NReps = OptParser.template get<int>("nreps");
+  Cfg.Detailed = OptParser.exists("detailed");
+  if (OptParser.exists("quiet")) {
+    Cfg.Quiet = true;
+    qout.set(Cfg.Quiet);
+  }
+  return Cfg;
+}
+
+inline void dump_config_info(Config &Cfg) {
+  qout << "Using vector size = " << Cfg.Size << "\n";
+  qout << "Using #of repetitions = " << Cfg.NReps << "\n";
+}
+
+} // namespace vadd
 
 template <typename T> class VectorAdd {
   cl::sycl::queue DeviceQueue_;
@@ -91,7 +130,7 @@ public:
   std::pair<unsigned, unsigned> calculate() {
     // timer start
     unsigned EvtTiming = 0;
-    std::cout << "Nreps = " << Rep_ << std::endl;
+    qout << "Nreps = " << Rep_ << "\n";
     Timer_.start();
     // loop
     for (int i = 0; i < Rep_; ++i) {
@@ -109,46 +148,45 @@ public:
 };
 
 template <typename VaddChildT> void test_sequence(int argc, char **argv) {
-  std::cout << "Welcome to vector addition" << std::endl;
-
   try {
-    unsigned Size = 0, NReps = 0;
-
-    options::Parser OptParser;
-    OptParser.template add<int>("size", LIST_SIZE, "size of vectors to add");
-    OptParser.template add<int>("nreps", NREPS,
-                                "number of repetitions in tester loop");
-    OptParser.parse(argc, argv);
-
-    Size = OptParser.template get<int>("size");
-    NReps = OptParser.template get<int>("nreps");
-
-    std::cout << "Using vector size = " << Size << std::endl;
-    std::cout << "Using #of repetitions = " << NReps << std::endl;
-
+    auto Cfg = vadd::read_config(argc, argv);
+    qout << "Welcome to vector addition"
+         << "\n";
+    dump_config_info(Cfg);
     auto Q = set_queue();
-    print_info(std::cout, Q.get_device());
+    print_info(qout, Q.get_device());
 
 #ifdef MEASURE_NORMAL
     VectorAddHost<int> VaddH{Q}; // Q unused for this derived class
-    VectorAddTester<int> TesterH{VaddH, Size, NReps};
+    VectorAddTester<int> TesterH{VaddH, Cfg.Size, Cfg.NReps};
     TesterH.initialize();
     auto ElapsedH = TesterH.calculate();
-    std::cout << "Measured host time: " << ElapsedH.first << std::endl;
+    qout << "Measured host time: " << ElapsedH.first << "\n";
 #endif
 
     VaddChildT Vadd{Q};
-    VectorAddTester<typename VaddChildT::type> Tester{Vadd, Size, NReps};
+    VectorAddTester<typename VaddChildT::type> Tester{Vadd, Cfg.Size,
+                                                      Cfg.NReps};
 
-    std::cout << "Initializing" << std::endl;
+    qout << "Initializing"
+         << "\n";
     Tester.initialize();
 
-    std::cout << "Calculating" << std::endl;
+    qout << "Calculating"
+         << "\n";
     auto Elapsed = Tester.calculate();
 
-    std::cout << "Measured time: " << Elapsed.first / 1000.0 << std::endl;
-    std::cout << "Pure execution time: " << Elapsed.second / 1000000000.0
-              << std::endl;
+    qout << "Measured time: " << Elapsed.first / 1000.0 << "\n";
+
+    auto ExecTime = Elapsed.second / nsec_per_sec;
+    qout << "Pure execution time: " << ExecTime << "\n";
+
+    // Quiet mode output: vector size, elapsed time
+    if (Cfg.Quiet) {
+      qout.set(!Cfg.Quiet);
+      qout << Cfg.Size << " " << ExecTime << "\n";
+      qout.set(Cfg.Quiet);
+    }
   } catch (cl::sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
     abort();
@@ -159,7 +197,8 @@ template <typename VaddChildT> void test_sequence(int argc, char **argv) {
     std::cerr << "Unknown error\n";
     abort();
   }
-  std::cout << "Everything is correct" << std::endl;
+  qout << "Everything is correct"
+       << "\n";
 }
 
 } // namespace sycltesters

@@ -3,11 +3,14 @@
 # CMake build system for DPC++/SYCL examples
 #
 # on linux (or windows with unix makefiles)
-# run as: cmake -DCMAKE_CXX_COMPILER=${DPC_COMPILER}/clang++ ..
+# run as: cmake -DCMAKE_CXX_COMPILER=${SYCL_COMPILER}/clang++ ..
 #
 # on windows it is like
 # with Visual Studio: cmake -T "Intel(R) oneAPI DPC++ Compiler" ..
 # with Ninja: cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp ..
+#
+# on Windows run tests as: cmake --build . --target test
+# also: ctest --force-new-ctest-process --rerun-failed --output-on-failure
 #
 #------------------------------------------------------------------------------
 #
@@ -80,6 +83,10 @@ if(USE_CIMG)
 target_include_directories(testers-frame INTERFACE ${ROOT_DIR}/cimg)
 endif()
 
+# enable testing shall go before add_subdir
+# https://stackoverflow.com/questions/30250494/ctest-not-detecting-tests
+enable_testing()
+
 # vector additions
 add_subdirectory(vadd)
 
@@ -105,4 +112,3 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/dumps)
 
 # dummy install
 install()
-enable_testing()

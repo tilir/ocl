@@ -44,14 +44,5 @@ if(USE_CIMG)
   endif()
 endif()
   target_link_libraries(${KERNEL} testers-frame)
-
-# under WIN32 OneAPI distribution have Release driver, so no dumps possible through env
-if(NOT WIN32)
-  file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/dumps/${KERNEL})
-  add_test(NAME ${KERNEL}_run
-     COMMAND ${CMAKE_COMMAND} -E env "IGC_ShaderDumpEnable=1" env "IGC_ShaderDumpEnableAll=1" env "IGC_DumpToCustomDir=${CMAKE_BINARY_DIR}/dumps/${KERNEL}" ${CMAKE_BINARY_DIR}/${KERNEL}
-     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-  )
-endif()
 endfunction() # buildv
 

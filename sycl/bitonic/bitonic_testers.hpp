@@ -5,8 +5,6 @@
 //
 // Macros to control things:
 //  * inherited from testers.hpp: RUNHOST, INORD...
-//  -DVERIFY            : check for sorted
-//  -DMEASURE_NORMAL    : check against CPU sort (default is std::sort)
 //  -DCHECK_BITONIC_CPU : check against bitonic sort CPU code
 //
 //------------------------------------------------------------------------------
@@ -45,7 +43,7 @@ namespace sycltesters {
 namespace bitonicsort {
 struct Config {
   unsigned Size, LocalSize;
-  int Vis = 0, Quiet;
+  bool Vis = false, Quiet = false, Detailed = false;
 };
 
 inline Config read_config(int argc, char **argv) {
@@ -54,24 +52,23 @@ inline Config read_config(int argc, char **argv) {
   OptParser.template add<int>(
       "size", DEF_SIZE, "logarithmic size to sort (1 << size) is real size");
   OptParser.template add<int>("lsz", DEF_BLOCK_SIZE, "local size");
-  OptParser.template add<int>("vis", 0,
-                              "pass 1 to visualize before and after sort");
-  OptParser.template add<int>("q", 0, "pass 1 for quiet mode");
+  OptParser.template add<int>("vis", 0, "visualize before and after sort");
+  OptParser.template add<int>("detailed", 0, "detailed events");
+  OptParser.template add<int>("quiet", 0, "quiet mode for bulk runs");
   OptParser.parse(argc, argv);
 
   Cfg.Size = OptParser.template get<int>("size");
   Cfg.LocalSize = OptParser.template get<int>("lsz");
-  Cfg.Quiet = OptParser.template get<int>("q");
-  Cfg.Vis = OptParser.template get<int>("vis");
+  Cfg.Vis = OptParser.exists("vis");
+  Cfg.Detailed = OptParser.exists("detailed");
 
-  if (Cfg.Size < 2 || Cfg.Size > 31) {
-    std::cerr << "Size is logarithmic, 2 is min, 31 is max" << std::endl;
-    std::terminate();
-  }
+  if (Cfg.Size < 2 || Cfg.Size > 31)
+    throw std::runtime_error("Size is logarithmic, 2 is min, 31 is max");
 
-  if (Cfg.Quiet && Cfg.Vis) {
-    std::cerr << "Please select quiet or visual" << std::endl;
-    std::terminate();
+  if (OptParser.exists("quiet")) {
+    Cfg.Quiet = true;
+    Cfg.Vis = false; // quiet implies novis
+    qout.set(Cfg.Quiet);
   }
 
   return Cfg;
@@ -136,23 +133,28 @@ public:
 template <typename T> class BitonicSortTester {
   BitonicSort<T> &Sorter_;
   Timer Timer_;
-  unsigned Sz_;
+  bitonicsort::Config Cfg_;
+  int Sz_;
   std::vector<T> A_;
 
 public:
-  BitonicSortTester(BitonicSort<T> &Sorter, unsigned Sz)
-      : Sorter_(Sorter), Sz_(Sz), A_(Sz) {}
+  BitonicSortTester(BitonicSort<T> &Sorter, bitonicsort::Config Cfg)
+      : Sorter_(Sorter), Cfg_(Cfg), Sz_(1u << Cfg_.Size), A_(Sz_) {}
 
   void initialize() {
     Dice d(0, Sz_);
     std::generate(A_.begin(), A_.end(), [&] { return d(); });
   }
 
+  template <typename It> void assign(It begin, It end) {
+    A_.assign(begin, end);
+  }
+
   std::pair<unsigned, unsigned> calculate() {
     unsigned EvtTiming = 0;
     Timer_.start();
-    EvtRet_t Ret = Sorter_(A_.data(), Sz_);
-    EvtTiming += getTime(Ret);
+    EvtRet_t Ret = Sorter_(A_.data(), A_.size());
+    EvtTiming += getTime(Ret, Cfg_.Detailed ? false : true);
     Timer_.stop();
     return {Timer_.elapsed(), EvtTiming};
   }
@@ -162,62 +164,79 @@ public:
 };
 
 template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
-  bool Quiet;
   try {
     auto Cfg = bitonicsort::read_config(argc, argv);
-    Quiet = Cfg.Quiet;
     auto Q = set_queue();
-    if (!Quiet) {
-      std::cout << "Welcome to bitonic sort" << std::endl;
-      std::cout << "Using vector size = " << (1 << Cfg.Size) << std::endl;
-      print_info(std::cout, Q.get_device());
-    }
+    qout << "Welcome to bitonic sort"
+         << "\n";
+    qout << "Using vector size = " << (1 << Cfg.Size) << "\n";
+    print_info(qout, Q.get_device());
 
     using Ty = typename BitonicChildT::type;
-#ifdef MEASURE_NORMAL
-    BitonicSortHost<Ty> BitonicSortH{Q}; // Q unused for this derived class
-    BitonicSortTester<Ty> TesterH{BitonicSortH, 1u << Cfg.Size};
-    TesterH.initialize();
-    auto ElapsedH = TesterH.calculate();
-    if (!Quiet)
-      std::cout << "Measured host time: " << ElapsedH.first << std::endl;
-#endif
-
     BitonicChildT BitonicSort{Q, Cfg.LocalSize};
-    BitonicSortTester<Ty> Tester{BitonicSort, 1u << Cfg.Size};
+    BitonicSortTester<Ty> Tester{BitonicSort, Cfg};
 
-    if (!Quiet)
-      std::cout << "Initializing" << std::endl;
+    qout << "Initializing"
+         << "\n";
     Tester.initialize();
 
     if (Cfg.Vis) {
-      std::cout << "Before sort:" << std::endl;
-      visualize_seq(Tester.begin(), Tester.end(), std::cout);
+      qout << "Before sort:"
+           << "\n";
+      visualize_seq(Tester.begin(), Tester.end(), qout);
     }
 
-    if (!Quiet)
-      std::cout << "Calculating" << std::endl;
+#ifdef MEASURE_NORMAL
+    BitonicSortHost<Ty> BitonicSortH{Q}; // Q unused for this derived class
+    BitonicSortTester<Ty> TesterH{BitonicSortH, Cfg};
+    TesterH.assign(Tester.begin(), Tester.end());
+    auto ElapsedH = TesterH.calculate();
+    qout << "Measured host time: " << ElapsedH.first << "\n";
+    if (Cfg.Vis) {
+      qout << "After sort (host):"
+           << "\n";
+      visualize_seq(TesterH.begin(), TesterH.end(), qout);
+    }
+#endif
+
+    qout << "Calculating"
+         << "\n";
     auto Elapsed = Tester.calculate();
 
     if (Cfg.Vis) {
-      std::cout << "After sort:" << std::endl;
-      visualize_seq(Tester.begin(), Tester.end(), std::cout);
+      qout << "After sort:"
+           << "\n";
+      visualize_seq(Tester.begin(), Tester.end(), qout);
     }
 
 #ifdef VERIFY
     if (!std::is_sorted(Tester.begin(), Tester.end())) {
-      std::cerr << "Sorting failed" << std::endl;
+      std::cerr << "Sorting failed"
+                << "\n";
       std::terminate();
     }
+// we may also check with host results
+#ifdef MEASURE_NORMAL
+    auto MisPoint =
+        std::mismatch(TesterH.begin(), TesterH.end(), Tester.begin());
+    if (MisPoint.first != TesterH.end()) {
+      ptrdiff_t I = std::distance(MisPoint.first, TesterH.begin());
+      std::cerr << "Mismatch at: " << I << std::endl;
+      std::cerr << *MisPoint.first << " vs " << *MisPoint.second << std::endl;
+      throw std::runtime_error("Mismath");
+    }
 #endif
+#endif
+    qout << "Measured time: " << Elapsed.first / msec_per_sec << "\n";
 
-    if (!Quiet) {
-      std::cout << "Measured time: " << Elapsed.first / msec_per_sec
-                << std::endl;
-      std::cout << "Pure execution time: " << Elapsed.second / nsec_per_sec
-                << std::endl;
-    } else {
-      std::cout << Cfg.Size << " " << Elapsed.first / msec_per_sec << std::endl;
+    auto ExecTime = Elapsed.second / nsec_per_sec;
+    qout << "Pure execution time: " << ExecTime << "\n";
+
+    // Quiet mode output: size, elapsed time
+    if (Cfg.Quiet) {
+      qout.set(!Cfg.Quiet);
+      qout << Cfg.Size << " " << ExecTime << "\n";
+      qout.set(Cfg.Quiet);
     }
   } catch (cl::sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
@@ -229,8 +248,8 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
     std::cerr << "Unknown error\n";
     std::terminate();
   }
-  if (!Quiet)
-    std::cout << "Everything is correct" << std::endl;
+  qout << "Everything is correct"
+       << "\n";
 }
 
 } // namespace sycltesters

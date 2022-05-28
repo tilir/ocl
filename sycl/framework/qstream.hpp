@@ -19,11 +19,12 @@ namespace sycltesters {
 enum class QSState { Quiet = 0, Loud = 1 };
 
 // we need to have MT guarantees, because qout is shared global object
-class QuietStream {
+class QuietStream : private std::streambuf, public std::ostream {
   std::atomic<QSState> State_;
 
 public:
-  QuietStream(QSState State = QSState::Loud) : State_(State) {}
+  QuietStream(QSState State = QSState::Loud)
+      : std::ostream(this), State_(State) {}
   QSState state() const { return State_.load(); }
   QSState set(QSState State) {
     QSState Old = State_.exchange(State);
@@ -34,14 +35,17 @@ public:
   QSState set(bool Quiet) {
     return set(Quiet ? QSState::Quiet : QSState::Loud);
   }
+
+private:
+  int overflow(int c) override {
+    if (State_.load() == QSState::Loud) {
+      std::cout.put(c);
+      return 0;
+    }
+    return c;
+  }
 };
 
 inline QuietStream qout;
-
-template <typename T> QuietStream &operator<<(QuietStream &Qstream, T &&data) {
-  if (Qstream.state() == QSState::Loud)
-    std::cout << std::forward<T>(data);
-  return Qstream;
-}
 
 } // namespace sycltesters

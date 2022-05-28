@@ -66,7 +66,7 @@ namespace sycltesters {
 // so this namespace is required in each.
 namespace filter {
 
-constexpr int DEF_LSZ = 32;
+constexpr int DEF_LSZ = 8;
 constexpr int DEF_DETAILED = 0;
 constexpr int DEF_IMSZ = 100;
 constexpr int DEF_FILTSZ = 3;

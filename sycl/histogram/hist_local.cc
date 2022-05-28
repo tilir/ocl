@@ -40,25 +40,25 @@ public:
     const size_t LMEM = NumBins;
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
-    auto *BufferData = cl::sycl::malloc_shared<T>(NumData, DeviceQueue);
-    auto *BufferBins = cl::sycl::malloc_shared<T>(NumBins, DeviceQueue);
+    auto *BufferData = sycl::malloc_shared<T>(NumData, DeviceQueue);
+    auto *BufferBins = sycl::malloc_shared<T>(NumBins, DeviceQueue);
 
     auto EvtCpyData = DeviceQueue.copy(Data, BufferData, NumData);
     auto EvtFillBins = DeviceQueue.copy(Bins, BufferBins, NumBins);
-    cl::sycl::nd_range<1> DataSz{Gsz_, Lsz_};
+    sycl::nd_range<1> DataSz{Gsz_, Lsz_};
     ProfInfo.emplace_back(EvtCpyData, "Copy Data");
     ProfInfo.emplace_back(EvtFillBins, "Zero-out Bins");
 
-    auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
+    auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       Cgh.depends_on(EvtCpyData);
       Cgh.depends_on(EvtFillBins);
       Cgh.use_kernel_bundle(ExeBundle);
 
       // note local buffer is of NumBins but local iteration size is of LSZ
-      using LTy = cl::sycl::accessor<T, 1, sycl_read_write, sycl_local>;
+      using LTy = sycl::accessor<T, 1, sycl_read_write, sycl_local>;
       sycl::range<1> LocalMemorySize{LMEM};
       LTy LocalHist{LocalMemorySize, Cgh};
-      auto KernHist = [=](cl::sycl::nd_item<1> WorkItem) {
+      auto KernHist = [=](sycl::nd_item<1> WorkItem) {
         const int N = WorkItem.get_global_id(0);
         const int L = WorkItem.get_local_id(0);
         const int Group = WorkItem.get_group(0);

@@ -12,7 +12,8 @@
 // -gsz=<g> : global iteration space (in bsz-units)
 // -lsz=<l> : local iteration space
 // -val=<val> : fill data with val for debug
-// -detailed=1 : detailed report from event
+// -detailed : detailed report from event
+// -quiet : quiet mode for bulk runs
 //
 //------------------------------------------------------------------------------
 //
@@ -53,9 +54,10 @@ constexpr int DEF_GSZ = 64;  // global iteration space in blocks
 constexpr int DEF_LSZ = 32;
 constexpr int DEF_VAL = 0;
 constexpr int DEF_DETAILED = 0;
+constexpr int DEF_QUIET = 0;
 
 struct Config {
-  bool ValExists, Detailed;
+  bool ValExists, Detailed, Quiet;
   int Block, Sz, GlobSz, LocSz, Val;
 };
 
@@ -70,6 +72,7 @@ inline Config read_config(int argc, char **argv) {
   OptParser.template add<int>("lsz", DEF_LSZ, "local iteration space");
   OptParser.template add<int>("val", DEF_VAL, "fill data with given value");
   OptParser.template add<int>("detailed", DEF_DETAILED, "detailed event view");
+  OptParser.template add<int>("quiet", DEF_QUIET, "detailed event view");
   OptParser.parse(argc, argv);
 
   Cfg.Block = OptParser.template get<int>("bsz");
@@ -80,21 +83,28 @@ inline Config read_config(int argc, char **argv) {
   Cfg.Val = OptParser.template get<int>("val");
   Cfg.Detailed = OptParser.exists("detailed");
 
+  if (OptParser.exists("quiet")) {
+    Cfg.Quiet = true;
+    qout.set(Cfg.Quiet);
+  }
+  return Cfg;
+}
+
+inline void dump_config_info(Config &Cfg) {
   if (Cfg.Block < 1 || Cfg.Sz < 1 || Cfg.GlobSz < 1 || Cfg.LocSz < 1) {
     std::cerr << "Wrong parameters (expect all sizes >= 1)\n";
     std::terminate();
   }
 
-  std::cout << "Block size: " << Cfg.Block << std::endl;
-  std::cout << "Data size: " << Cfg.Sz << std::endl;
-  std::cout << "Global size: " << Cfg.GlobSz << std::endl;
-  std::cout << "Local size: " << Cfg.LocSz << std::endl;
+  qout << "Block size: " << Cfg.Block << std::endl;
+  qout << "Data size: " << Cfg.Sz << std::endl;
+  qout << "Global size: " << Cfg.GlobSz << std::endl;
+  qout << "Local size: " << Cfg.LocSz << std::endl;
   if (Cfg.ValExists)
-    std::cout << "Filling with" << Cfg.Val << std::endl;
+    qout << "Filling with" << Cfg.Val << std::endl;
   if (Cfg.Detailed)
-    std::cout << "Detailed events" << std::endl;
-  std::cout.flush();
-  return Cfg;
+    qout << "Detailed events" << std::endl;
+  qout.flush();
 }
 } // namespace reduce
 
@@ -147,31 +157,37 @@ template <typename ReductionChildT, typename Ty>
 ReductionTester<Ty> single_reduce_sequence(sycl::queue &Q, reduce::Config Cfg,
                                            Ty *Data, EBundleTy ExeBundle) {
 #if defined(MEASURE_NORMAL)
-  std::cout << "Calculating host" << std::endl;
+  qout << "Calculating host" << std::endl;
   ReductionHost<Ty> ReductionHost{Q, ExeBundle}; // both args here unused
   ReductionTester<Ty> TesterH{ReductionHost, Data, Cfg};
   Ty ResultH;
   auto ElapsedH = TesterH.calculate(ResultH);
-  std::cout << "Measured host time: " << ElapsedH.first / msec_per_sec
-            << std::endl;
+  qout << "Measured host time: " << ElapsedH.first / msec_per_sec << std::endl;
 #endif
 
   ReductionChildT Reduce{Q, ExeBundle, Cfg};
 
   ReductionTester<Ty> Tester{Reduce, Data, Cfg};
 
-  std::cout << "Calculating gpu" << std::endl;
+  qout << "Calculating gpu" << std::endl;
   Ty Result;
   auto Elapsed = Tester.calculate(Result);
 
-  std::cout << "Measured time: " << Elapsed.first / msec_per_sec << std::endl
-            << "Pure execution time: " << Elapsed.second / nsec_per_sec
-            << std::endl;
+  auto ExecTime = Elapsed.second / nsec_per_sec;
+  qout << "Measured time: " << Elapsed.first / msec_per_sec << std::endl;
+  qout << "Pure execution time: " << ExecTime << std::endl;
+
+  // Quiet mode output: size, elapsed time
+  if (Cfg.Quiet) {
+    qout.set(!Cfg.Quiet);
+    qout << Cfg.Sz << " " << ExecTime << "\n";
+    qout.set(Cfg.Quiet);
+  }
 
 #if defined(MEASURE_NORMAL) && defined(VERIFY)
   if (Result != ResultH) {
-    std::cout << "Mismatch result: " << std::endl;
-    std::cout << Result << " vs " << ResultH << std::endl;
+    qout << "Mismatch result: " << std::endl;
+    qout << Result << " vs " << ResultH << std::endl;
     std::terminate();
   }
 #endif
@@ -180,13 +196,13 @@ ReductionTester<Ty> single_reduce_sequence(sycl::queue &Q, reduce::Config Cfg,
 
 template <typename ReductionChildT>
 void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
-  using Ty = typename ReductionChildT::type;
-  std::cout << "Welcome to reduction" << std::endl;
-
   try {
     auto Cfg = reduce::read_config(argc, argv);
+    using Ty = typename ReductionChildT::type;
+    qout << "Welcome to reduction" << std::endl;
+    reduce::dump_config_info(Cfg);
     auto Q = set_queue();
-    print_info(std::cout, Q.get_device());
+    print_info(qout, Q.get_device());
 
     IBundleTy SrcBundle = sycl::get_kernel_bundle<sycl::bundle_state::input>(
         Q.get_context(), {kid});
@@ -198,10 +214,10 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     Data.resize(Cfg.Sz);
     constexpr Ty MAX_VAL = 10;
     if (Cfg.ValExists) {
-      std::cout << "Initializing with value = " << Cfg.Val << std::endl;
+      qout << "Initializing with value = " << Cfg.Val << std::endl;
       std::fill(Data.begin(), Data.end(), Cfg.Val);
     } else {
-      std::cout << "Initializing with random" << std::endl;
+      qout << "Initializing with random" << std::endl;
       rand_initialize(Data.begin(), Data.end(), 0, MAX_VAL);
     }
     single_reduce_sequence<ReductionChildT>(Q, Cfg, Data.data(), ExeBundle);
@@ -216,7 +232,7 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     std::cerr << "Unknown error\n";
     abort();
   }
-  std::cout << "Everything is correct" << std::endl;
+  qout << "Everything is correct" << std::endl;
 }
 
 } // namespace sycltesters

@@ -70,9 +70,6 @@ int main(int argc, char **argv) {
 #else
   auto ids = sycl::get_kernel_ids();
   sycl::kernel_id kid = ids[0];
-  std::cout << "Registered kernels:\n";
-  for (auto elt : ids)
-    std::cout << elt.get_name() << std::endl;
 #endif
 
   sycltesters::test_sequence<ReductionObjectBuf<int>>(argc, argv, kid);

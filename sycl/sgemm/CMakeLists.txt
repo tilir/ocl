@@ -13,6 +13,7 @@ endforeach()
 
 # special targets with defines
 buildv(matmult_nopriv matmult.cc "NOPRIVATE=1")
+# excluded from testing
 buildv(matmult_local_nobarrier matmult_local.cc "NOBARRIER=1")
 
 if(USE_MKL)
@@ -21,3 +22,17 @@ buildv(matmult_mkl_trans matmult.cc "MKLTRANS=1")
 target_link_libraries(matmult_mkl $<LINK_ONLY:MKL::MKL_DPCPP>)
 target_link_libraries(matmult_mkl_trans $<LINK_ONLY:MKL::MKL_DPCPP>)
 endif()
+
+set(TESTING  
+  matmult
+  matmult_local
+  matmult_local_shared
+  matmult_groups
+  matmult_groups_priv
+  matmult_nopriv
+)
+
+foreach(KERNEL ${TESTING})
+  add_test(NAME ${KERNEL}_run
+           COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${KERNEL} -quiet)
+endforeach()

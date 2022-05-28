@@ -12,8 +12,9 @@
 // -hsz=<hsz> : number of buckets
 // -gsz=<g> : global iteration space (in bsz-units)
 // -lsz=<l> : local iteration space
-// -vis=1 : visualize hist (use wisely) available only in measure_normal
-// -zero=1 : fill hist with zeroes for debug
+// -zero : fill hist with zeroes for debug
+// -vis : visualize hist (use wisely) available only in measure_normal
+// -quiet : quiet mode for bulk runs
 //
 // Special visualization part:
 // -img=path : path to image to build realistics hist
@@ -71,9 +72,10 @@ constexpr int DEF_BWIDTH = 2;
 constexpr int DEF_VIS = 0;
 constexpr int DEF_ZEROOUT = 0;
 constexpr int DEF_DETAILED = 0;
+constexpr int DEF_QUIET = 0;
 
 struct Config {
-  bool Vis, Zero, Detailed;
+  bool Vis, Zero, Detailed, Quiet;
   int Block, Sz, HistSz, GlobSz, LocSz, BWidth;
   std::string Image;
 };
@@ -88,13 +90,14 @@ inline Config read_config(int argc, char **argv) {
   OptParser.template add<int>("gsz", DEF_GSZ,
                               "global iteration space (in bsz-element blocks)");
   OptParser.template add<int>("lsz", DEF_LSZ, "local iteration space");
-  OptParser.template add<int>("vis", 0, "pass 1 to visualize histogram");
+  OptParser.template add<int>("vis", DEF_VIS, "visualize histogram");
   OptParser.template add<std::string>("img", "",
                                       "pass image path to load image");
   OptParser.template add<int>("bwidth", DEF_BWIDTH,
                               "bin width for hist visualization");
   OptParser.template add<int>("zero", DEF_ZEROOUT, "fill data with zeroes");
   OptParser.template add<int>("detailed", DEF_DETAILED, "detailed event view");
+  OptParser.template add<int>("quiet", DEF_QUIET, "detailed event view");
   OptParser.parse(argc, argv);
 
   Cfg.Image = OptParser.template get<std::string>("img");
@@ -103,11 +106,21 @@ inline Config read_config(int argc, char **argv) {
   Cfg.HistSz = OptParser.template get<int>("hsz");
   Cfg.GlobSz = OptParser.template get<int>("gsz") * Cfg.Block;
   Cfg.LocSz = OptParser.template get<int>("lsz");
-  Cfg.Vis = OptParser.exists("vis");
   Cfg.BWidth = OptParser.template get<int>("bwidth");
+  Cfg.Vis = OptParser.exists("vis");
   Cfg.Zero = OptParser.exists("zero");
   Cfg.Detailed = OptParser.exists("detailed");
 
+  if (OptParser.exists("quiet")) {
+    Cfg.Quiet = true;
+    Cfg.Vis = false; // quiet implies novis of course
+    qout.set(Cfg.Quiet);
+  }
+
+  return Cfg;
+}
+
+inline void dump_config_info(Config &Cfg) {
   if (Cfg.Block < 1 || Cfg.Sz < 1 || Cfg.HistSz < 1 || Cfg.GlobSz < 1 ||
       Cfg.LocSz < 1) {
     std::cerr << "Wrong parameters (expect all sizes >= 1)\n";
@@ -121,17 +134,17 @@ inline Config read_config(int argc, char **argv) {
   }
 #endif
 
-  std::cout << "Block size: " << Cfg.Block << std::endl;
-  std::cout << "Data size: " << Cfg.Sz << std::endl;
-  std::cout << "Histogram size: " << Cfg.HistSz << std::endl;
-  std::cout << "Global size: " << Cfg.GlobSz << std::endl;
-  std::cout << "Local size: " << Cfg.LocSz << std::endl;
+  qout << "Block size: " << Cfg.Block << std::endl;
+  qout << "Data size: " << Cfg.Sz << std::endl;
+  qout << "Histogram size: " << Cfg.HistSz << std::endl;
+  qout << "Global size: " << Cfg.GlobSz << std::endl;
+  qout << "Local size: " << Cfg.LocSz << std::endl;
   if (Cfg.Vis)
-    std::cout << "Visual mode" << std::endl;
+    qout << "Visual mode" << std::endl;
   if (Cfg.Detailed)
-    std::cout << "Detailed events" << std::endl;
-  return Cfg;
+    qout << "Detailed events" << std::endl;
 }
+
 } // namespace hist
 
 template <typename T> class Histogramm {
@@ -199,34 +212,40 @@ template <typename HistChildT, typename Ty>
 HistogrammTester<Ty> single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
                                           Ty *Data, EBundleTy ExeBundle) {
 #if defined(MEASURE_NORMAL)
-  std::cout << "Calculating host" << std::endl;
+  qout << "Calculating host" << std::endl;
   HistogrammHost<Ty> HistH{Q}; // Q unused for this derived class
   HistogrammTester<Ty> TesterH{HistH, Data, Cfg.Sz, Cfg.HistSz,
                                /* unused */ ExeBundle};
   auto ElapsedH = TesterH.calculate(Cfg);
-  std::cout << "Measured host time: " << ElapsedH.first / msec_per_sec
-            << std::endl;
+  qout << "Measured host time: " << ElapsedH.first / msec_per_sec << std::endl;
   Ty *HostData = TesterH.dataBins();
   if (Cfg.Vis)
-    dump_hist(std::cout, "Host result", HostData, Cfg.HistSz);
+    dump_hist(qout, "Host result", HostData, Cfg.HistSz);
 #endif
 
   HistChildT Hist{Q, Cfg};
 
   HistogrammTester<Ty> Tester{Hist, Data, Cfg.Sz, Cfg.HistSz, ExeBundle};
 
-  std::cout << "Calculating gpu" << std::endl;
+  qout << "Calculating gpu" << std::endl;
   auto Elapsed = Tester.calculate(Cfg);
 
-  std::cout << "Measured time: " << Elapsed.first / msec_per_sec << std::endl
-            << "Pure execution time: " << Elapsed.second / nsec_per_sec
-            << std::endl;
+  auto ExecTime = Elapsed.second / nsec_per_sec;
+  qout << "Measured time: " << Elapsed.first / msec_per_sec << std::endl
+       << "Pure execution time: " << ExecTime << std::endl;
+
+  // Quiet mode output: size, elapsed time
+  if (Cfg.Quiet) {
+    qout.set(!Cfg.Quiet);
+    qout << Cfg.Sz << " " << ExecTime << "\n";
+    qout.set(Cfg.Quiet);
+  }
 
   Ty *GPUData = Tester.dataBins();
 
   if (Cfg.Vis) {
-    dump_hist(std::cout, "Data: ", Tester.data(), Cfg.Sz);
-    dump_hist(std::cout, "GPU result", GPUData, Cfg.HistSz);
+    dump_hist(qout, "Data: ", Tester.data(), Cfg.Sz);
+    dump_hist(qout, "GPU result", GPUData, Cfg.HistSz);
   }
 
 #if defined(MEASURE_NORMAL) && defined(VERIFY)
@@ -234,8 +253,8 @@ HistogrammTester<Ty> single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
   auto MisPoint = std::mismatch(HostData, HostData + Cfg.HistSz, GPUData);
   if (MisPoint.first != HostData + Cfg.HistSz) {
     ptrdiff_t I = MisPoint.first - HostData;
-    std::cout << "Mismatch at: " << I << std::endl;
-    std::cout << *MisPoint.first << " vs " << *MisPoint.second << std::endl;
+    qout << "Mismatch at: " << I << std::endl;
+    qout << *MisPoint.first << " vs " << *MisPoint.second << std::endl;
     throw std::runtime_error("Mismath");
   }
 #endif
@@ -248,10 +267,10 @@ template <typename HistChildT>
 void cimg_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
                         EBundleTy ExeBundle) {
   using Ty = typename HistChildT::type;
-  std::cout << "Initializing with image: " << Cfg.Image << std::endl;
+  qout << "Initializing with image: " << Cfg.Image << std::endl;
   cimg_library::CImg<unsigned char> Image(Cfg.Image.c_str());
   Cfg.Sz = Image.width() * Image.height();
-  std::cout << "Overriding size with image size " << Cfg.Sz << std::endl;
+  qout << "Overriding size with image size " << Cfg.Sz << std::endl;
   cimg_library::CImgDisplay MainDisp(Image, "Histogram image source");
 
   // RGB channels
@@ -292,13 +311,13 @@ void cimg_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
 
 template <typename HistChildT>
 void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
-  using Ty = typename HistChildT::type;
-  std::cout << "Welcome to histogram" << std::endl;
-
   try {
+    using Ty = typename HistChildT::type;
     auto Cfg = hist::read_config(argc, argv);
+    qout << "Welcome to histogram" << std::endl;
+    dump_config_info(Cfg);
     auto Q = set_queue();
-    print_info(std::cout, Q.get_device());
+    print_info(qout, Q.get_device());
 
     IBundleTy SrcBundle = sycl::get_kernel_bundle<sycl::bundle_state::input>(
         Q.get_context(), {kid});
@@ -308,7 +327,7 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
 
     if (Cfg.Image.empty()) {
       std::vector<Ty> Data;
-      std::cout << "Initializing with random" << std::endl;
+      qout << "Initializing with random" << std::endl;
       Data.resize(Cfg.Sz);
       if (Cfg.Zero)
         std::fill(Data.begin(), Data.end(), 0);
@@ -334,7 +353,7 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     std::cerr << "Unknown error\n";
     abort();
   }
-  std::cout << "Everything is correct" << std::endl;
+  qout << "Everything is correct" << std::endl;
 }
 
 } // namespace sycltesters

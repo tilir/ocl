@@ -38,10 +38,15 @@ public:
     assert(Data != nullptr && Bins != nullptr);
     sycltesters::EvtVec_t ProfInfo;
 
-    // avoid memory allocation with use_host_ptr
-    cl::sycl::buffer<T, 1> BufferData(Data, NumData, {host_ptr});
-    cl::sycl::buffer<T, 1> BufferBins(Bins, NumBins, {host_ptr});
-    cl::sycl::nd_range<1> DataSz{Gsz_, Lsz_};
+#ifdef HOST_PTR
+    // avoid memory allocations but at the cost of host access every time
+    sycl::buffer<T, 1> BufferData(Data, NumData, {host_ptr});
+    sycl::buffer<T, 1> BufferBins(Bins, NumBins, {host_ptr});
+#else
+    sycl::buffer<T, 1> BufferData(Data, NumData);
+    sycl::buffer<T, 1> BufferBins(Bins, NumBins);
+#endif
+    sycl::nd_range<1> DataSz{Gsz_, Lsz_};
     BufferData.set_final_data(nullptr);
 
     auto &DeviceQueue = Queue();
@@ -61,8 +66,7 @@ public:
     });
 
     ProfInfo.emplace_back(Evt, "Calculating histogram");
-    Evt.wait();
-
+    DeviceQueue.wait(); // or explicit host accessor to NumBins
     return ProfInfo;
   }
 };

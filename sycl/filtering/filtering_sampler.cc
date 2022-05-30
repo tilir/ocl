@@ -43,7 +43,8 @@ public:
     int FiltSize = Filt.sqrt_size();
     int DataSize = FiltSize * FiltSize;
     int HalfWidth = FiltSize / 2;
-    sycl::buffer<float, 1> FiltData(Filt.data(), DataSize, {host_ptr});
+    sycl::buffer<float, 1> FiltData(Filt.data(), DataSize);
+    FiltData.set_final_data(nullptr);
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       using ImAccTy = sycl::accessor<sycl::float4, 2, sycl_read, sycl_image>;
@@ -83,7 +84,7 @@ public:
     });
 
     ProfInfo.push_back(Evt);
-
+    DeviceQueue.wait(); // or explicit host accessor to Dst
     return ProfInfo;
   }
 };

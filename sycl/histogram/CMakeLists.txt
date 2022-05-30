@@ -10,9 +10,13 @@ foreach(KERNEL ${KERNELS})
   buildv(${KERNEL} ${KERNEL}.cc)
 endforeach()
 
+# special parameters
+buildv(hist_naive_host hist_naive_acc.cc "HOST_PTR=1")
+
 set(TESTING
   hist_naive
   hist_naive_acc
+  hist_naive_host
   hist_local
   hist_private
 )

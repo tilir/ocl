@@ -40,9 +40,8 @@ public:
     sycltesters::EvtVec_t ProfInfo;
     Result = 0;
 
-    // avoid memory allocation with use_host_ptr
-    sycl::buffer<T, 1> BufferData(Data, NumData, {host_ptr});
-    sycl::buffer<T, 1> BufferResult(&Result, 1, {host_ptr});
+    sycl::buffer<T, 1> BufferData(Data, NumData);
+    sycl::buffer<T, 1> BufferResult(&Result, 1);
     BufferData.set_final_data(nullptr);
     auto &DeviceQueue = Queue();
 
@@ -57,8 +56,7 @@ public:
     });
 
     ProfInfo.emplace_back(Evt, "Calculating reduction");
-
-    auto Res = BufferResult.template get_access<sycl_read>();
+    DeviceQueue.wait(); // or explicit host accessor to BufferResult
     return ProfInfo;
   }
 };

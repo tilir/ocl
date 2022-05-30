@@ -41,8 +41,7 @@ public:
     assert(Data != nullptr && Bins != nullptr);
     sycltesters::EvtVec_t ProfInfo;
 
-    // avoid memory allocation with use_host_ptr
-    sycl::buffer<T, 1> BufferData(Data, NumData, {host_ptr});
+    sycl::buffer<T, 1> BufferData(Data, NumData);
     sycl::buffer<T, 1> BufferResults(nullptr, NumRes);
     sycl::nd_range<1> DataSz{GSZ, LSZ};
     BufferData.set_final_data(nullptr);

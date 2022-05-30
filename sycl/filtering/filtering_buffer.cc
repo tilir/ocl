@@ -38,12 +38,14 @@ public:
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
     sycl::range<2> Dims(ImW, ImH);
-    sycl::buffer<sycl::float4, 1> Dst(DstData, ImW * ImH, {host_ptr});
-    sycl::buffer<sycl::float4, 1> Src(SrcData, ImW * ImH, {host_ptr});
+    sycl::buffer<sycl::float4, 1> Dst(DstData, ImW * ImH);
+    sycl::buffer<sycl::float4, 1> Src(SrcData, ImW * ImH);
+    Src.set_final_data(nullptr);
     int FiltSize = Filt.sqrt_size();
     int DataSize = FiltSize * FiltSize;
     int HalfWidth = FiltSize / 2;
-    sycl::buffer<float, 1> FiltData(Filt.data(), DataSize, {host_ptr});
+    sycl::buffer<float, 1> FiltData(Filt.data(), DataSize);
+    FiltData.set_final_data(nullptr);
 
     // explicit accessor types
     using ImReadTy = sycl::accessor<sycl::float4, 1, sycl_read, sycl_constant>;
@@ -81,6 +83,7 @@ public:
       Cgh.parallel_for<class filter_2d_buf>(Dims, KernFilter);
     });
 
+    DeviceQueue.wait(); // or explicit host accessor to Dst
     ProfInfo.push_back(Evt);
     return ProfInfo;
   }

@@ -29,28 +29,26 @@ class MatrixMultNaiveBuf : public sycltesters::MatrixMult<T> {
   unsigned Lsz_;
 
 public:
-  MatrixMultNaiveBuf(cl::sycl::queue &DeviceQueue, unsigned Lsz)
+  MatrixMultNaiveBuf(sycl::queue &DeviceQueue, unsigned Lsz)
       : sycltesters::MatrixMult<T>(DeviceQueue), Lsz_(Lsz) {}
 
   sycltesters::EvtRet_t operator()(const T *Aptr, const T *Bptr, T *Cptr,
                                    size_t AX, size_t AY, size_t BY) override {
     assert(Aptr != nullptr && Bptr != nullptr && Cptr != nullptr);
     sycltesters::EvtVec_t ProfInfo;
-    cl::sycl::range<2> Asz{AX, AY}, Bsz{AY, BY}, Csz{AX, BY};
-    cl::sycl::buffer<T, 2> BufferA(Aptr, Asz), BufferB(Bptr, Bsz),
-        BufferC(Cptr, Csz);
-
-    BufferA.set_final_data(nullptr);
-    BufferB.set_final_data(nullptr);
+    sycl::range<2> Asz{AX, AY}, Bsz{AY, BY}, Csz{AX, BY};
+    sycl::buffer<T, 2> BufA(Aptr, Asz), BufB(Bptr, Bsz), BufC(Cptr, Csz);
+    BufA.set_final_data(nullptr);
+    BufB.set_final_data(nullptr);
 
     auto &DeviceQueue = Queue();
 
-    auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
-      auto A = BufferA.template get_access<sycl_read>(Cgh);
-      auto B = BufferB.template get_access<sycl_read>(Cgh);
-      auto C = BufferC.template get_access<sycl_write>(Cgh);
+    auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
+      auto A = BufA.template get_access<sycl_read>(Cgh);
+      auto B = BufB.template get_access<sycl_read>(Cgh);
+      auto C = BufC.template get_access<sycl_write>(Cgh);
 
-      auto Kernmul = [A, B, C, AY](cl::sycl::id<2> WorkItem) {
+      auto Kernmul = [A, B, C, AY](sycl::id<2> WorkItem) {
         const int Row = WorkItem.get(0);
         const int Col = WorkItem.get(1);
 
@@ -69,7 +67,7 @@ public:
     });
 
     ProfInfo.push_back(Evt);
-    Evt.wait();
+    DeviceQueue.wait(); // or explicit host accessor to BufC
 
     return ProfInfo;
   }

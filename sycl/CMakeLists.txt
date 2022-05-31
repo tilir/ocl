@@ -14,6 +14,7 @@
 #
 # Running on Windows with env
 # > set "SYCL_DEVICE_FILTER=cpu" & sgemm\matmult_local.exe
+# also set "SYCL_CACHE_PERSISTENT=1" is useful to not spend time recompiling
 #
 #------------------------------------------------------------------------------
 #
@@ -34,8 +35,8 @@
 #------------------------------------------------------------------------------
 
 # for release measurements try:
-# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DMEASURE_NORMAL=1 -DVERIFY=1 -DUSE_CIMG=1 -DUSE_MKL=1 ..
-# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DUSE_CIMG=1 -DUSE_MKL=1 ..
+# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DMEASURE_NORMAL=1 -DVERIFY=1 -DUSE_CIMG=1 -DUSE_MKL=1 -DDUMP_SPIRV=1 ..
+# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DUSE_CIMG=1 -DUSE_MKL=1 -DDUMP_SPIRV=1 ..
 
 cmake_minimum_required(VERSION 3.15)
 project(syclexamples)

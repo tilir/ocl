@@ -37,7 +37,7 @@ endif()
 if(DUMP_SPIRV)
   # object library to prevent linking
   add_library(${KSPV} OBJECT ${SRC})
-  target_compile_options(${KSPV} PUBLIC "-fsycl" "-fsycl-device-only" "-fno-sycl-use-bitcode" "-fsycl-unnamed-lambda")
+  target_compile_options(${KSPV} PUBLIC "-fsycl" "-fsycl-device-only" "-fno-sycl-use-bitcode" "-fsycl-unnamed-lambda" "-o" "${KERNEL}.spv")
   target_compile_features(${KSPV} PRIVATE cxx_std_20)
   builds(${KSPV} "${ARGV2}" "${ARGV3}")
 

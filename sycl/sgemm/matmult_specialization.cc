@@ -1,9 +1,7 @@
 //------------------------------------------------------------------------------
 //
 // Matrix multiplication with simple kernel (SYCL vs serial CPU)
-//
-// Macros to control things:
-// -DNOPRIVATE -- switch off temporary storage in private memory
+// illustrates usage of private constants
 //
 //------------------------------------------------------------------------------
 //
@@ -21,17 +19,20 @@
 #include "sgemm_testers.hpp"
 
 // class is used for kernel name
-template <typename T> class mmult_naive_buf;
+template <typename T> class mmult_specialized_buf;
+
+// specialization constant for AY
+const static sycl::specialization_id<int> AYC;
 
 using ConfigTy = sycltesters::sgemm::Config;
 
 template <typename T>
-class MatrixMultNaiveBuf : public sycltesters::MatrixMult<T> {
+class MatrixMultSpecBuf : public sycltesters::MatrixMult<T> {
   using sycltesters::MatrixMult<T>::Queue;
   ConfigTy Cfg_;
 
 public:
-  MatrixMultNaiveBuf(sycl::queue &DeviceQueue, ConfigTy Cfg)
+  MatrixMultSpecBuf(sycl::queue &DeviceQueue, ConfigTy Cfg)
       : sycltesters::MatrixMult<T>(DeviceQueue), Cfg_(Cfg) {}
 
   sycltesters::EvtRet_t operator()(const T *Aptr, const T *Bptr, T *Cptr,
@@ -49,23 +50,20 @@ public:
       auto A = BufA.template get_access<sycl_read>(Cgh);
       auto B = BufB.template get_access<sycl_read>(Cgh);
       auto C = BufC.template get_access<sycl_write>(Cgh);
+      Cgh.template set_specialization_constant<AYC>(AY);
 
-      auto Kernmul = [=](sycl::id<2> WorkItem) {
+      auto Kernmul = [=](sycl::id<2> WorkItem, sycl::kernel_handler Kh) {
         const int Row = WorkItem.get(0);
         const int Col = WorkItem.get(1);
+        const int AYK = Kh.template get_specialization_constant<AYC>();
 
-#ifdef NOPRIVATE
-        for (int K = 0; K < AY; K++)
-          C[Row][Col] += A[Row][K] * B[K][Col];
-#else
         T Sum = 0;
-        for (int K = 0; K < AY; K++)
+        for (int K = 0; K < AYK; K++)
           Sum += A[Row][K] * B[K][Col];
         C[Row][Col] = Sum;
-#endif
       };
 
-      Cgh.parallel_for<class mmult_naive_buf<T>>(Csz, Kernmul);
+      Cgh.parallel_for<class mmult_specialized_buf<T>>(Csz, Kernmul);
     });
 
     ProfInfo.push_back(Evt);
@@ -76,5 +74,5 @@ public:
 };
 
 int main(int argc, char **argv) {
-  sycltesters::test_sequence<MatrixMultNaiveBuf<float>>(argc, argv);
+  sycltesters::test_sequence<MatrixMultSpecBuf<float>>(argc, argv);
 }

@@ -2,7 +2,7 @@
 
 #------------------------------------------------------------------------------
 #
-# Running some numerical experiments 
+# Runner for some numerical experiments
 #
 #------------------------------------------------------------------------------
 #
@@ -11,53 +11,54 @@
 #
 #------------------------------------------------------------------------------
 
+require 'fileutils'
+require 'open3'
+require 'optparse'
+require 'ostruct'
+
 puts "Running SGEMMs";
+
+ARGV << '-h' if ARGV.empty?
+
+options = OpenStruct.new
+options.verbose = false
+options.progname = "sgemm\\matmult.exe"
+options.outfile = "gemm_priv.dat"
+options.lsz = 8
+options.ax0 = 4
+options.axn = 20
+options.ay = 8
+options.by = 6
+options.bsz = 256
+options.device = "tgllp"
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: #{$0} -p <progname> -o <outfile> [other opts]"
+  opts.on("-v", "--[no-]verbose", "Run verbosely (default: #{options.verbose})") { |v| options.verbose = v }
+  opts.on("-p", "--progname p", "Program name to run (default: #{options.progname})") { |v| options.progname = v }
+  opts.on("-o", "--outfile o", "Output file (default: #{options.outfile})") { |v| options.outfile = v }
+  opts.on("-l", "--local-size l", Integer, "Local memory size (default: #{options.lsz})") { |v| options.lsz = v }
+  opts.on("-d", "--devname f", String, "Device name (default: #{options.device})") { |v| options.device = v }
+  opts.on_tail("-h", "--help", "Show this message") do
+    puts opts
+    exit
+  end
+end.parse!
 
 def run_sgemm(progname, outfile, ax, ax0, ay, by, lsz, bsz)
   puts "Running for lsz = #{lsz}, ax = #{ax}"
   outmark = ">>"
   outmark = ">" if ax == ax0
-  sysline = "#{progname} -q=1 -ay=#{ay} -by=#{by} -ax=#{ax} -lsz=#{lsz} -bsz=#{bsz} #{outmark} #{outfile}"
+  sysline = "#{progname} -quiet=1 -ay=#{ay} -by=#{by} -ax=#{ax} -lsz=#{lsz} -bsz=#{bsz} #{outmark} #{outfile}"
   puts("#{sysline}")
   system("#{sysline}")
 end
 
-device = "tgllp"
-ax0 = 4
-axn = 20
-ay = 8
-by = 6
-lsz = 8
-bsz = 256
+ax0 = options.ax0
+axn = options.axn
 
-# naive matrix multiplication, no accumulator
-progname = "sgemm\\matmult_nopriv.exe"
-outfile = "gemm_nopriv.dat"
-(ax0..axn).each { |ax| run_sgemm(progname, outfile, ax, ax0, ay, by, lsz, bsz) }
+(ax0..axn).each do |ax|
+  run_sgemm(options.progname, options.outfile, ax, ax0,
+            options.ay, options.by, options.lsz, options.bsz)
+end
 
-# naive matrix multiplication, accumulator in private memory
-progname = "sgemm\\matmult.exe"
-outfile = "gemm_priv.dat"
-(ax0..axn).each { |ax| run_sgemm(progname, outfile, ax, ax0, ay, by, lsz, bsz) }
-
-# MKL-based matrix multiplication, non-transposed matrices
-progname = "sgemm\\matmult_mkl.exe"
-outfile = "gemm_mkl.dat"
-(ax0..axn).each { |ax| run_sgemm(progname, outfile, ax, ax0, ay, by, lsz, bsz) }
-
-# MKL-based matrix multiplication, pre-transposed matrices
-progname = "sgemm\\matmult_mkl_trans.exe"
-outfile = "gemm_mkl_trans.dat"
-(ax0..axn).each { |ax| run_sgemm(progname, outfile, ax, ax0, ay, by, lsz, bsz) }
-
-# Matrix multiplication with local memory 8x8
-progname = "sgemm\\matmult_local.exe"
-lsz = 8
-outfile = "gemm_lsz#{lsz}.dat"
-(ax0..axn).each { |ax| run_sgemm(progname, outfile, ax, ax0, ay, by, lsz, bsz) }
-
-# Matrix multiplication with local memory 16x16
-progname = "sgemm\\matmult_local.exe"
-lsz = 16
-outfile = "gemm_lsz#{lsz}.dat"
-(ax0..axn).each { |ax| run_sgemm(progname, outfile, ax, ax0, ay, by, lsz, bsz) }

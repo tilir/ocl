@@ -34,9 +34,12 @@
 #
 #------------------------------------------------------------------------------
 
+# for check with host:
+# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DMEASURE_NORMAL=1 -DVERIFY=1 -DUSE_CIMG=1 -DUSE_MKL=1 ..
+# for SPIRV dumps:
+# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DUSE_CIMG=1 -DUSE_MKL=1 -DDUMP_SPIRV=1 .. 
 # for release measurements try:
-# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DMEASURE_NORMAL=1 -DVERIFY=1 -DUSE_CIMG=1 -DUSE_MKL=1 -DDUMP_SPIRV=1 ..
-# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DUSE_CIMG=1 -DUSE_MKL=1 -DDUMP_SPIRV=1 ..
+# cmake -GNinja -DCMAKE_CXX_COMPILER=dpcpp -DCMAKE_BUILD_TYPE=Release -DUSE_CIMG=1 -DUSE_MKL=1 ..
 
 cmake_minimum_required(VERSION 3.15)
 project(syclexamples)

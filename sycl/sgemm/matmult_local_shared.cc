@@ -21,22 +21,25 @@
 #include "sgemm_testers.hpp"
 
 // class is used for kernel name
-template <typename T> class mmult_local_shared_buf;
+template <typename T> class mmult_local_shared;
+
+using ConfigTy = sycltesters::sgemm::Config;
 
 template <typename T>
-class MatrixMultLocalBuf : public sycltesters::MatrixMult<T> {
+class MatrixMultLocalShared : public sycltesters::MatrixMult<T> {
   using sycltesters::MatrixMult<T>::Queue;
-  unsigned Lsz_;
+  ConfigTy Cfg_;
 
 public:
-  MatrixMultLocalBuf(sycl::queue &DeviceQueue, unsigned Lsz)
-      : sycltesters::MatrixMult<T>(DeviceQueue), Lsz_(Lsz) {}
+  MatrixMultLocalShared(sycl::queue &DeviceQueue, ConfigTy Cfg)
+      : sycltesters::MatrixMult<T>(DeviceQueue), Cfg_(Cfg) {}
 
   sycltesters::EvtRet_t operator()(const T *Aptr, const T *Bptr, T *Cptr,
                                    size_t AX, size_t AY, size_t BY) override {
     assert(Aptr != nullptr && Bptr != nullptr && Cptr != nullptr);
-    const auto LSZ = Lsz_; // avoid implicit capture of this
-    assert((AY % LSZ) == 0);
+    const auto LSZ = Cfg_.Lsz; // avoid implicit capture of this
+    if ((AY % LSZ) != 0)
+      throw std::runtime_error("Expect local size = multiple of AY");
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
 
@@ -80,7 +83,7 @@ public:
         C[GlobalRow * BY + GlobalCol] = Sum;
       };
 
-      Cgh.parallel_for<class mmult_local_shared_buf<T>>(Range, KernMul);
+      Cgh.parallel_for<class mmult_local_shared<T>>(Range, KernMul);
     });
 
     ProfInfo.push_back(Evt);
@@ -96,5 +99,5 @@ public:
 };
 
 int main(int argc, char **argv) {
-  sycltesters::test_sequence<MatrixMultLocalBuf<float>>(argc, argv);
+  sycltesters::test_sequence<MatrixMultLocalShared<float>>(argc, argv);
 }

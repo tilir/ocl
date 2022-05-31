@@ -25,11 +25,11 @@
 template <typename T>
 class MatrixMultMKLShared : public sycltesters::MatrixMult<T> {
   using sycltesters::MatrixMult<T>::Queue;
-  unsigned Lsz_;
+  ConfigTy Cfg_;
 
 public:
-  MatrixMultMKLShared(cl::sycl::queue &DeviceQueue, unsigned Lsz)
-      : sycltesters::MatrixMult<T>(DeviceQueue), Lsz_(Lsz) {}
+  MatrixMultMKLShared(sycl::queue &DeviceQueue, ConfigTy Cfg)
+      : sycltesters::MatrixMult<T>(DeviceQueue), Cfg_(Cfg) {}
 
   sycltesters::EvtRet_t operator()(const T *Aptr, const T *Bptr, T *Cptr,
                                    size_t AX, size_t AY, size_t BY) override {
@@ -64,7 +64,7 @@ public:
                                 A, AX, B, AY, Beta, C, AX, GemmDependencies);
 
     ProfInfo.push_back(Evt);
-    Evt.wait();
+    DeviceQueue.wait();
 
     // copy back
     std::copy(C, C + AX * BY, Cptr);

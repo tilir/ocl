@@ -25,10 +25,12 @@
 // class is used for kernel name
 template <typename T> class mmult_local_buf;
 
+using ConfigTy = sycltesters::sgemm::Config;
+
 template <typename T>
 class MatrixMultLocalBuf : public sycltesters::MatrixMult<T> {
   using sycltesters::MatrixMult<T>::Queue;
-  unsigned Lsz_;
+  ConfigTy Cfg_;
 
   // roundup(4, 2) == 4
   // roundup(4, 3) == 6
@@ -42,8 +44,8 @@ class MatrixMultLocalBuf : public sycltesters::MatrixMult<T> {
   int isqrt(int n) { return sqrt(n); }
 
 public:
-  MatrixMultLocalBuf(sycl::queue &DeviceQueue, unsigned Lsz)
-      : sycltesters::MatrixMult<T>(DeviceQueue), Lsz_(Lsz) {}
+  MatrixMultLocalBuf(sycl::queue &DeviceQueue, ConfigTy Cfg)
+      : sycltesters::MatrixMult<T>(DeviceQueue), Cfg_(Cfg) {}
 
   sycltesters::EvtRet_t operator()(const T *Aptr, const T *Bptr, T *Cptr,
                                    size_t AX, size_t AY, size_t BY) override {

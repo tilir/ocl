@@ -1,5 +1,6 @@
 set(KERNELS
   matmult
+  matmult_specialization
   matmult_local
   matmult_local_shared  
   matmult_groups
@@ -27,6 +28,7 @@ endif()
 
 set(TESTING  
   matmult
+  matmult_specialization
   matmult_local
   matmult_local_shared  
   matmult_groups

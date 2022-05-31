@@ -22,20 +22,23 @@
 // class is used for kernel name
 template <typename T> class mmult_local_buf;
 
+using ConfigTy = sycltesters::sgemm::Config;
+
 template <typename T>
 class MatrixMultLocalBuf : public sycltesters::MatrixMult<T> {
   using sycltesters::MatrixMult<T>::Queue;
-  unsigned Lsz_;
+  ConfigTy Cfg_;
 
 public:
-  MatrixMultLocalBuf(cl::sycl::queue &DeviceQueue, unsigned Lsz)
-      : sycltesters::MatrixMult<T>(DeviceQueue), Lsz_(Lsz) {}
+  MatrixMultLocalBuf(sycl::queue &DeviceQueue, ConfigTy Cfg)
+      : sycltesters::MatrixMult<T>(DeviceQueue), Cfg_(Cfg) {}
 
   sycltesters::EvtRet_t operator()(const T *Aptr, const T *Bptr, T *Cptr,
                                    size_t AX, size_t AY, size_t BY) override {
     assert(Aptr != nullptr && Bptr != nullptr && Cptr != nullptr);
-    const int LSZ = Lsz_; // avoid implicit capture of this
-    assert((AY % LSZ) == 0);
+    const int LSZ = Cfg_.Lsz; // avoid implicit capture of this
+    if ((AY % LSZ) != 0)
+      throw std::runtime_error("Expect local size = multiple of AY");
     const int NumTiles = AY / LSZ;
     sycltesters::EvtVec_t ProfInfo;
     sycl::range<2> Asz{AX, AY}, Bsz{AY, BY}, Csz{AX, BY};

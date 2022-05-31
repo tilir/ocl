@@ -229,7 +229,7 @@ template <typename MMChildT> void test_sequence(int argc, char **argv) {
     qout << "Measured host time: " << ElapsedH.first / msec_per_sec << "\n";
 #endif
 
-    MMChildT MMult{Q, Cfg.Lsz};
+    MMChildT MMult{Q, Cfg};
 
     MatrixMultTester<Ty> Tester{MMult,  A.data(), B.data(),
                                 Cfg.Ax, Cfg.Ay,   Cfg.By};

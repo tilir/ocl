@@ -1,9 +1,11 @@
 set(KERNELS
   matmult
   matmult_local
-  matmult_local_shared
+  matmult_local_shared  
   matmult_groups
   matmult_groups_priv
+# excluded from testing
+  matmult_local_maxlsz
 )
 
 # common includes and libs
@@ -26,7 +28,7 @@ endif()
 set(TESTING  
   matmult
   matmult_local
-  matmult_local_shared
+  matmult_local_shared  
   matmult_groups
   matmult_groups_priv
   matmult_nopriv

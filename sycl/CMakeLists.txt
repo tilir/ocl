@@ -12,6 +12,9 @@
 # on Windows run tests as: cmake --build . --target test
 # also: ctest --force-new-ctest-process --rerun-failed --output-on-failure
 #
+# Running on Windows with env
+# > set "SYCL_DEVICE_FILTER=cpu" & sgemm\matmult_local.exe
+#
 #------------------------------------------------------------------------------
 #
 #  Macros to control things:

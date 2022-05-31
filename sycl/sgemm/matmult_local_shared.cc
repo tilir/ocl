@@ -29,7 +29,7 @@ class MatrixMultLocalBuf : public sycltesters::MatrixMult<T> {
   unsigned Lsz_;
 
 public:
-  MatrixMultLocalBuf(cl::sycl::queue &DeviceQueue, unsigned Lsz)
+  MatrixMultLocalBuf(sycl::queue &DeviceQueue, unsigned Lsz)
       : sycltesters::MatrixMult<T>(DeviceQueue), Lsz_(Lsz) {}
 
   sycltesters::EvtRet_t operator()(const T *Aptr, const T *Bptr, T *Cptr,
@@ -40,22 +40,24 @@ public:
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
 
-    auto *A = cl::sycl::malloc_shared<T>(AX * AY, DeviceQueue);
-    auto *B = cl::sycl::malloc_shared<T>(AY * BY, DeviceQueue);
-    auto *C = cl::sycl::malloc_shared<T>(AX * BY, DeviceQueue);
+    auto *A = sycl::malloc_shared<T>(AX * AY, DeviceQueue);
+    auto *B = sycl::malloc_shared<T>(AY * BY, DeviceQueue);
+    auto *C = sycl::malloc_shared<T>(AX * BY, DeviceQueue);
+    // alternative:
+    // auto EvtCpyA = DeviceQueue.copy(Aptr, A, AX * AY);
     std::copy(Aptr, Aptr + AX * AY, A);
     std::copy(Bptr, Bptr + AY * BY, B);
     std::copy(Cptr, Cptr + AX * BY, C); // zero-out
 
-    cl::sycl::range<2> BlockSize{LSZ, LSZ};
-    cl::sycl::nd_range<2> Range{cl::sycl::range<2>{AX, BY}, BlockSize};
+    sycl::range<2> BlockSize{LSZ, LSZ};
+    sycl::nd_range<2> Range{sycl::range<2>{AX, BY}, BlockSize};
 
-    auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
+    auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       // local memory
-      using LTy = cl::sycl::accessor<T, 2, sycl_read_write, sycl_local>;
+      using LTy = sycl::accessor<T, 2, sycl_read_write, sycl_local>;
       LTy Asub{BlockSize, Cgh}, Bsub{BlockSize, Cgh};
 
-      auto KernMul = [=](cl::sycl::nd_item<2> It) {
+      auto KernMul = [=](sycl::nd_item<2> It) {
         const int Row = It.get_local_id(0);
         const int Col = It.get_local_id(1);
         const int GlobalRow = LSZ * It.get_group(0) + Row;
@@ -86,9 +88,9 @@ public:
 
     // copy back
     std::copy(C, C + AX * BY, Cptr);
-    cl::sycl::free(A, DeviceQueue);
-    cl::sycl::free(B, DeviceQueue);
-    cl::sycl::free(C, DeviceQueue);
+    sycl::free(A, DeviceQueue);
+    sycl::free(B, DeviceQueue);
+    sycl::free(C, DeviceQueue);
     return ProfInfo;
   }
 };

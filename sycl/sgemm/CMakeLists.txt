@@ -4,7 +4,8 @@ set(KERNELS
   matmult_specialization_svm
   matmult_transposed
   matmult_local
-  matmult_local_shared  
+  matmult_local_shared
+  matmult_local_shared_spec
   matmult_groups
   matmult_groups_priv
 # excluded from testing
@@ -36,7 +37,8 @@ set(TESTING
   matmult_specialization
   matmult_specialization_svm
   matmult_local
-  matmult_local_shared  
+  matmult_local_shared
+  matmult_local_shared_spec
   matmult_groups
   matmult_groups_priv
   matmult_nopriv

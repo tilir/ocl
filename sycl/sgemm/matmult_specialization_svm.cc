@@ -50,11 +50,18 @@ public:
     auto *C = cl::sycl::malloc_shared<T>(AX * BY, DeviceQueue);
     std::copy(Aptr, Aptr + AX * AY, A);
     std::copy(Bptr, Bptr + AY * BY, B);
-    std::fill(Cptr, Cptr + AX * BY, 0);
+
+    sycl::kernel_id KId = sycl::get_kernel_id<mmult_shared_transposed<T>>();
+    sycl::kernel_bundle KbSrc =
+        sycl::get_kernel_bundle<sycl::bundle_state::input>(
+            DeviceQueue.get_context(), {KId});
+    KbSrc.template set_specialization_constant<AYC>(AY);
+    KbSrc.template set_specialization_constant<BYC>(BY);
+    sycl::kernel_bundle Kb = sycl::build(KbSrc);
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
-      Cgh.template set_specialization_constant<AYC>(AY);
-      Cgh.template set_specialization_constant<BYC>(BY);
+      Cgh.use_kernel_bundle(Kb);
+
       auto Kernmul = [=](sycl::id<2> WorkItem, sycl::kernel_handler Kh) {
         const int Row = WorkItem.get(0);
         const int Col = WorkItem.get(1);

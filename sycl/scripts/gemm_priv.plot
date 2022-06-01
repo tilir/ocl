@@ -3,7 +3,6 @@
 # Gnuplot script for matrix experiment
 #
 # private memory used/not used without local memory
-# local memory used for sizes 8 and 16
 #
 # collect data with gemm.rb
 # ..\scripts\gemm.rb -p sgemm\matmult_specialization.exe -o gemm_spec.dat
@@ -50,18 +49,3 @@ plot 'gemm_trans.dat' with linespoints t 'SVM multiplication with transpose',\
      'gemm_notrans.dat' with linespoints t 'SVM multiplication',\
      'gemm_mkl_trans.dat' with linespoints title 'MKL multiplication with transpose',\
      'gemm_mkl.dat' with linespoints t 'MKL multiplication'
-
-# private vs local (different sizes)
-#set output "sgemm.pdf"
-#plot 'gemm_priv.dat' with linespoints title 'Accumulator in private memory',\
-#     'gemm_lsz8.dat' with linespoints t 'Local memory 8x8',\
-#     'gemm_lsz16.dat' with linespoints t 'Local memory 16x16'
-
-# private vs local (different sizes) vs MKL
-#set output "sgemm_mkl.pdf"
-#plot 'gemm_nopriv.dat' with linespoints t 'Private memory not used',\
-#     'gemm_priv.dat' with linespoints title 'Accumulator in private memory',\
-#     'gemm_mkl.dat' with linespoints t 'MKL multiplication',\
-#     'gemm_mkl_trans.dat' with linespoints t 'MKL multiplication with transpose',\
-#     'gemm_lsz8.dat' with linespoints t 'Local memory 8x8',\
-#     'gemm_lsz16.dat' with linespoints t 'Local memory 16x16'

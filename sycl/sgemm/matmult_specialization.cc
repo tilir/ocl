@@ -46,11 +46,18 @@ public:
 
     auto &DeviceQueue = Queue();
 
+    sycl::kernel_id KId = sycl::get_kernel_id<mmult_specialized_buf<T>>();
+    sycl::kernel_bundle KbSrc =
+        sycl::get_kernel_bundle<sycl::bundle_state::input>(
+            DeviceQueue.get_context(), {KId});
+    KbSrc.template set_specialization_constant<AYC>(AY);
+    sycl::kernel_bundle Kb = sycl::build(KbSrc);
+
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       auto A = BufA.template get_access<sycl_read>(Cgh);
       auto B = BufB.template get_access<sycl_read>(Cgh);
       auto C = BufC.template get_access<sycl_write>(Cgh);
-      Cgh.template set_specialization_constant<AYC>(AY);
+      Cgh.use_kernel_bundle(Kb);
 
       auto Kernmul = [=](sycl::id<2> WorkItem, sycl::kernel_handler Kh) {
         const int Row = WorkItem.get(0);

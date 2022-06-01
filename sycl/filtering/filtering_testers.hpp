@@ -316,6 +316,8 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     dump_config_info(Cfg);
     auto Q = set_queue();
     print_info(qout, Q.get_device());
+    if (!Q.get_device().has(sycl::aspect::image))
+      throw std::runtime_error("Image support required");
 
     IBundleTy SrcBundle = sycl::get_kernel_bundle<sycl::bundle_state::input>(
         Q.get_context(), {kid});

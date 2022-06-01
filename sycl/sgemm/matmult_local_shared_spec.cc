@@ -80,7 +80,7 @@ public:
         const int Col = It.get_local_id(1);
         const int AYK = Kh.template get_specialization_constant<AYC>();
         const int BYK = Kh.template get_specialization_constant<BYC>();
-        const int LSZK = Kh.template get_specialization_constant<BYC>();
+        const int LSZK = Kh.template get_specialization_constant<LSZC>();
 
         const int GlobalRow = LSZK * It.get_group(0) + Row;
         const int GlobalCol = LSZK * It.get_group(1) + Col;

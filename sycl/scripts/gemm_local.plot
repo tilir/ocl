@@ -8,6 +8,7 @@
 # ..\scripts\gemm.rb -p sgemm\matmult_mkl.exe -o gemm_mkl.dat
 # ..\scripts\gemm.rb -p sgemm\matmult_local_shared.exe -l 8 -o gemm_lsz8.dat
 # ..\scripts\gemm.rb -p sgemm\matmult_local_shared.exe -l 16 -o gemm_lsz16.dat
+# ..\scripts\gemm.rb -p sgemm\matmult_local_shared_spec.exe -l 16 -o gemm_lsz16_spec.dat
 #
 # run plotter with
 # > gnuplot -persist -c ..\scripts\gemm_local.plot

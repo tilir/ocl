@@ -1,6 +1,8 @@
 set(KERNELS
   matmult
   matmult_specialization
+  matmult_specialization_svm
+  matmult_transposed
   matmult_local
   matmult_local_shared  
   matmult_groups
@@ -16,6 +18,7 @@ endforeach()
 
 # special targets with defines
 buildv(matmult_nopriv matmult.cc "NOPRIVATE=1")
+buildv(matmult_notrans matmult_transposed.cc "NONTRANSPOSED=1")
 # excluded from testing
 buildv(matmult_local_nobarrier matmult_local.cc "NOBARRIER=1")
 
@@ -28,13 +31,21 @@ endif()
 
 set(TESTING  
   matmult
+  matmult_transposed
+  matmult_notrans
   matmult_specialization
+  matmult_specialization_svm
   matmult_local
   matmult_local_shared  
   matmult_groups
   matmult_groups_priv
   matmult_nopriv
 )
+
+if(USE_MKL)
+list(APPEND TESTING matmult_mkl)
+list(APPEND TESTING matmult_mkl_trans)
+endif()
 
 foreach(KERNEL ${TESTING})
   add_test(NAME ${KERNEL}_run

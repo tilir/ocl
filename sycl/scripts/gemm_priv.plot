@@ -5,13 +5,18 @@
 # private memory used/not used without local memory
 # local memory used for sizes 8 and 16
 #
-# collect data with gemm_priv.rb
-# ..\scripts\gemm_priv.rb -p sgemm\matmult.exe -o gemm_priv.dat
-# ..\scripts\gemm_priv.rb -p sgemm\matmult_nopriv.exe -o gemm_nopriv.dat
-# ..\scripts\gemm_priv.rb -p sgemm\matmult_mkl.exe -o gemm_mkl.dat
+# collect data with gemm.rb
+# ..\scripts\gemm.rb -p sgemm\matmult_specialization.exe -o gemm_spec.dat
+# ..\scripts\gemm.rb -p sgemm\matmult.exe -o gemm_priv.dat
+# ..\scripts\gemm.rb -p sgemm\matmult_nopriv.exe -o gemm_nopriv.dat
+# ..\scripts\gemm.rb -p sgemm\matmult_mkl.exe -o gemm_mkl.dat
+# ..\scripts\gemm.rb -p sgemm\matmult_mkl_trans.exe -o gemm_mkl_trans.dat
+# ..\scripts\gemm.rb -p sgemm\matmult_transposed.exe -o gemm_trans.dat
+# ..\scripts\gemm.rb -p sgemm\matmult_notrans.exe -o gemm_notrans.dat
+# ..\scripts\gemm.rb -p sgemm\matmult_specialization_svm.exe -o gemm_spec_svm.dat
 #
 # run plotter with
-# > gnuplot -persist -c gemm_priv.plot
+# > gnuplot -persist -c ..\scripts\gemm_priv.plot
 #
 #------------------------------------------------------------------------------
 #
@@ -28,10 +33,23 @@ set ylabel "time (seconds)"
 
 # private vs non-private vs MKL
 set output "sgemm_priv.png"
-plot 'gemm_spec.dat' with linespoints t 'Using specialization constant',\
-     'gemm_nopriv.dat' with linespoints t 'Private memory not used',\
+plot 'gemm_nopriv.dat' with linespoints t 'Private memory not used',\
      'gemm_priv.dat' with linespoints title 'Accumulator in private memory',\
-     'gemm_mkl.dat' with linespoints t 'MKL multiplication'     
+     'gemm_notrans.dat' with linespoints title 'Accumulator in private memory, SVM',\
+     'gemm_mkl.dat' with linespoints t 'MKL multiplication'
+
+# effect of specialization constant
+set output "sgemm_spec.png"
+plot 'gemm_spec.dat' with linespoints t 'Specialization constant',\
+     'gemm_spec_svm.dat' with linespoints t 'Specialization constants with SVM',\
+     'gemm_mkl.dat' with linespoints t 'MKL multiplication'
+
+# effects of transpositions
+set output "sgemm_trans.png"
+plot 'gemm_trans.dat' with linespoints t 'SVM multiplication with transpose',\
+     'gemm_notrans.dat' with linespoints t 'SVM multiplication',\
+     'gemm_mkl_trans.dat' with linespoints title 'MKL multiplication with transpose',\
+     'gemm_mkl.dat' with linespoints t 'MKL multiplication'
 
 # private vs local (different sizes)
 #set output "sgemm.pdf"

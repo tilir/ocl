@@ -50,7 +50,7 @@ public:
     // auto EvtCpyA = DeviceQueue.copy(Aptr, A, AX * AY);
     std::copy(Aptr, Aptr + AX * AY, A);
     std::copy(Bptr, Bptr + AY * BY, B);
-    std::copy(Cptr, Cptr + AX * BY, C); // zero-out
+    std::fill(Cptr, Cptr + AX * BY, 0);
 
     sycl::range<2> BlockSize{LSZ, LSZ};
     sycl::nd_range<2> Range{sycl::range<2>{AX, BY}, BlockSize};

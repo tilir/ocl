@@ -29,54 +29,41 @@ class HistogrammNaiveShared : public sycltesters::Histogramm<T> {
   unsigned Gsz_, Lsz_;
 
 public:
-  HistogrammNaiveShared(cl::sycl::queue &DeviceQueue, ConfigTy Cfg)
+  HistogrammNaiveShared(sycl::queue &DeviceQueue, ConfigTy Cfg)
       : sycltesters::Histogramm<T>(DeviceQueue), Gsz_(Cfg.GlobSz),
         Lsz_(Cfg.LocSz) {}
 
   sycltesters::EvtRet_t operator()(const T *Data, T *Bins, int NumData,
-                                   int NumBins, EBundleTy ExeBundle) override {
+                                   int NumBins) override {
     assert(Data != nullptr && Bins != nullptr);
+    const auto GSZ = Gsz_;
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
-    auto *BufferData = cl::sycl::malloc_shared<T>(NumData, DeviceQueue);
-    auto *BufferBins = cl::sycl::malloc_shared<T>(NumBins, DeviceQueue);
+    auto *BufferData = sycl::malloc_shared<T>(NumData, DeviceQueue);
+    auto *BufferBins = sycl::malloc_shared<T>(NumBins, DeviceQueue);
+    std::copy(Data, Data + NumData, BufferData);
+    std::fill(BufferBins, BufferBins + NumBins, 0);
+    sycl::range<1> DataSz{GSZ};
 
-    auto EvtCpyData = DeviceQueue.copy(Data, BufferData, NumData);
-    auto EvtFillBins = DeviceQueue.copy(Bins, BufferBins, NumBins);
-    cl::sycl::nd_range<1> DataSz{Gsz_, Lsz_};
-    ProfInfo.emplace_back(EvtCpyData, "Copy Data");
-    ProfInfo.emplace_back(EvtFillBins, "Zero-out Bins");
-
-    auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
-      Cgh.depends_on(EvtCpyData);
-      Cgh.depends_on(EvtFillBins);
-      Cgh.use_kernel_bundle(ExeBundle);
-
-      auto KernHist = [BufferData, NumData,
-                       BufferBins](cl::sycl::nd_item<1> WorkItem) {
-        const int N = WorkItem.get_global_id(0);
-        const int Gsz = WorkItem.get_global_range(0);
-        for (int I = N; I < NumData; I += Gsz)
+    auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
+      auto KernHist = [=](sycl::id<1> Id) {
+        const int N = Id.get(0);
+        for (int I = N; I < NumData; I += GSZ)
           global_atomic_ref<T>(BufferBins[BufferData[I]]).fetch_add(1);
       };
-
       Cgh.parallel_for<class hist_naive_shared<T>>(DataSz, KernHist);
     });
 
     ProfInfo.emplace_back(Evt, "Calculate histogramm");
-
-    // copy back (note dependency on Evt)
-    auto EvtCpyBins = DeviceQueue.copy(BufferBins, Bins, NumBins, Evt);
-    ProfInfo.emplace_back(EvtCpyBins, "Copy bins back");
     DeviceQueue.wait();
 
-    cl::sycl::free(BufferData, DeviceQueue);
-    cl::sycl::free(BufferBins, DeviceQueue);
+    std::copy(BufferBins, BufferBins + NumBins, Bins);
+    sycl::free(BufferData, DeviceQueue);
+    sycl::free(BufferBins, DeviceQueue);
     return ProfInfo;
   }
 };
 
 int main(int argc, char **argv) {
-  sycl::kernel_id kid = sycl::get_kernel_id<hist_naive_shared<int>>();
-  sycltesters::test_sequence<HistogrammNaiveShared<int>>(argc, argv, kid);
+  sycltesters::test_sequence<HistogrammNaiveShared<int>>(argc, argv);
 }

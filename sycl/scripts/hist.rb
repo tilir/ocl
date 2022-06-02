@@ -2,8 +2,8 @@
 
 #------------------------------------------------------------------------------
 #
-# Runner for numerical experiments on matrix multiplication
-# see gemm_priv.plot and gemm_local.plot on how to collect data
+# Runner for numerical experiments on matrix histogramm
+# see hist.plot on how to collect data
 #
 #------------------------------------------------------------------------------
 #
@@ -23,14 +23,13 @@ ARGV << '-h' if ARGV.empty?
 
 options = OpenStruct.new
 options.verbose = false
-options.progname = "sgemm\\matmult.exe"
-options.outfile = "gemm_priv.dat"
-options.lsz = 8
-options.ax0 = 4
-options.axn = 20
-options.ay = 8
-options.by = 6
-options.bsz = 256
+options.progname = "histogram\\hist_naive.exe"
+options.outfile = "hist.dat"
+options.lsz = 256
+options.bsz = 1024
+options.szmult = 10000
+options.sz0 = 10
+options.szn = 20
 options.device = "tgllp"
 
 OptionParser.new do |opts|
@@ -46,20 +45,19 @@ OptionParser.new do |opts|
   end
 end.parse!
 
-def run_sgemm(progname, outfile, ax, ax0, ay, by, lsz, bsz)
-  puts "Running for lsz = #{lsz}, ax = #{ax}"
+def run_hist(progname, outfile, szx, sz0, szmult, lsz, bsz)
+  sz = szx * szmult
+  puts "Running for lsz = #{lsz}, sz = #{sz}"
   outmark = ">>"
-  outmark = ">" if ax == ax0
-  sysline = "#{progname} -quiet=1 -ay=#{ay} -by=#{by} -ax=#{ax} -lsz=#{lsz} -bsz=#{bsz} #{outmark} #{outfile}"
+  outmark = ">" if szx == sz0
+  sysline = "#{progname} -quiet=1 -sz=#{sz} -lsz=#{lsz} -bsz=#{bsz} #{outmark} #{outfile}"
   puts("#{sysline}")
   system("#{sysline}")
 end
 
-ax0 = options.ax0
-axn = options.axn
+sz0 = options.sz0
+szn = options.szn
 
-(ax0..axn).each do |ax|
-  run_sgemm(options.progname, options.outfile, ax, ax0,
-            options.ay, options.by, options.lsz, options.bsz)
+(sz0..szn).each do |sz|
+  run_hist(options.progname, options.outfile, sz, sz0, options.szmult, options.lsz, options.bsz)
 end
-

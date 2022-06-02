@@ -27,54 +27,43 @@ using ConfigTy = sycltesters::hist::Config;
 // class is used for kernel name
 template <typename T> class hist_private_shared;
 
-const static sycl::specialization_id<int> PrivateSize;
-
 template <typename T>
 class HistogrammPrivateShared : public sycltesters::Histogramm<T> {
   using sycltesters::Histogramm<T>::Queue;
   unsigned Gsz_, Lsz_;
 
 public:
-  HistogrammPrivateShared(cl::sycl::queue &DeviceQueue, ConfigTy Cfg)
+  HistogrammPrivateShared(sycl::queue &DeviceQueue, ConfigTy Cfg)
       : sycltesters::Histogramm<T>(DeviceQueue), Gsz_(Cfg.GlobSz),
         Lsz_(Cfg.LocSz) {}
 
   sycltesters::EvtRet_t operator()(const T *Data, T *Bins, int NumData,
-                                   int NumBins, EBundleTy ExeBundle) override {
+                                   int NumBins) override {
     assert(Data != nullptr && Bins != nullptr);
     constexpr int MAX_HSZ = 4096;
-    const auto GSZ = Gsz_;
-    if ((MAX_HSZ < NumBins) || ((GSZ % NumBins) != 0)) {
+    if ((MAX_HSZ < NumBins) || ((Gsz_ % NumBins) != 0)) {
       std::cerr << "Now this example works only if #Bins <= " << MAX_HSZ
                 << std::endl;
       std::cerr << "Also #Bins shall divide global size: #Bins = " << NumBins
-                << ", GSZ = " << GSZ << std::endl;
+                << ", GSZ = " << Gsz_ << std::endl;
       std::terminate();
     }
+    const auto NGSZ = Gsz_ / NumBins;
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
-    auto *BufferData = cl::sycl::malloc_shared<T>(NumData, DeviceQueue);
-    auto *BufferBins = cl::sycl::malloc_shared<T>(NumBins, DeviceQueue);
+    auto *BufferData = sycl::malloc_shared<T>(NumData, DeviceQueue);
+    auto *BufferBins = sycl::malloc_shared<T>(NumBins, DeviceQueue);
+    std::copy(Data, Data + NumData, BufferData);
+    std::fill(BufferBins, BufferBins + NumBins, 0);
+    sycl::range<1> DataSz{NGSZ};
 
-    auto EvtCpyData = DeviceQueue.copy(Data, BufferData, NumData);
-    auto EvtFillBins = DeviceQueue.copy(Bins, BufferBins, NumBins);
-    cl::sycl::nd_range<1> DataSz{Gsz_ / NumBins, Lsz_};
-    ProfInfo.emplace_back(EvtCpyData, "Copy Data");
-    ProfInfo.emplace_back(EvtFillBins, "Zero-out Bins");
-
-    auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
-      Cgh.depends_on(EvtCpyData);
-      Cgh.depends_on(EvtFillBins);
-      Cgh.template set_specialization_constant<PrivateSize>(NumBins);
-
-      auto KernHist = [=](cl::sycl::nd_item<1> WorkItem,
-                          cl::sycl::kernel_handler Kh) {
+    auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
+      auto KernHist = [=](sycl::id<1> Id) {
         T PrivateHist[MAX_HSZ] = {0};
-
-        const int N = WorkItem.get_global_id(0);
+        const int N = Id.get(0);
 
         // building private histograms
-        for (int I = N; I < NumData / NumBins; I += GSZ / NumBins)
+        for (int I = N; I < NumData / NumBins; I += NGSZ)
           for (int J = 0; J < NumBins; J += 1) {
             const T Data = BufferData[I * NumBins + J];
             PrivateHist[Data] += 1;
@@ -97,13 +86,12 @@ public:
     ProfInfo.emplace_back(EvtCpyBins, "Copy bins back");
     DeviceQueue.wait();
 
-    cl::sycl::free(BufferData, DeviceQueue);
-    cl::sycl::free(BufferBins, DeviceQueue);
+    sycl::free(BufferData, DeviceQueue);
+    sycl::free(BufferBins, DeviceQueue);
     return ProfInfo;
   }
 };
 
 int main(int argc, char **argv) {
-  sycl::kernel_id kid = sycl::get_kernel_id<hist_private_shared<int>>();
-  sycltesters::test_sequence<HistogrammPrivateShared<int>>(argc, argv, kid);
+  sycltesters::test_sequence<HistogrammPrivateShared<int>>(argc, argv);
 }

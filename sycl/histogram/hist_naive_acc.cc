@@ -29,14 +29,15 @@ class HistogrammNaiveBuf : public sycltesters::Histogramm<T> {
   unsigned Gsz_, Lsz_;
 
 public:
-  HistogrammNaiveBuf(cl::sycl::queue &DeviceQueue, ConfigTy Cfg)
+  HistogrammNaiveBuf(sycl::queue &DeviceQueue, ConfigTy Cfg)
       : sycltesters::Histogramm<T>(DeviceQueue), Gsz_(Cfg.GlobSz),
         Lsz_(Cfg.LocSz) {}
 
   sycltesters::EvtRet_t operator()(const T *Data, T *Bins, int NumData,
-                                   int NumBins, EBundleTy ExeBundle) override {
+                                   int NumBins) override {
     assert(Data != nullptr && Bins != nullptr);
     sycltesters::EvtVec_t ProfInfo;
+    const auto GSZ = Gsz_;
 
 #ifdef HOST_PTR
     // avoid memory allocations but at the cost of host access every time
@@ -46,19 +47,18 @@ public:
     sycl::buffer<T, 1> BufferData(Data, NumData);
     sycl::buffer<T, 1> BufferBins(Bins, NumBins);
 #endif
-    sycl::nd_range<1> DataSz{Gsz_, Lsz_};
+    sycl::range<1> DataSz{GSZ};
     BufferData.set_final_data(nullptr);
 
     auto &DeviceQueue = Queue();
 
-    auto Evt = DeviceQueue.submit([&](cl::sycl::handler &Cgh) {
+    auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       auto Data = BufferData.template get_access<sycl_read>(Cgh);
       auto Bins = BufferBins.template get_access<sycl_atomic>(Cgh);
 
-      auto KernHist = [Data, NumData, Bins](cl::sycl::nd_item<1> WorkItem) {
-        const int N = WorkItem.get_global_id(0);
-        const int Gsz = WorkItem.get_global_range(0);
-        for (int I = N; I < NumData; I += Gsz)
+      auto KernHist = [=](sycl::id<1> Id) {
+        const int N = Id.get(0);
+        for (int I = N; I < NumData; I += GSZ)
           Bins[Data[I]].fetch_add(1);
       };
 
@@ -72,6 +72,5 @@ public:
 };
 
 int main(int argc, char **argv) {
-  sycl::kernel_id kid = sycl::get_kernel_id<hist_naive_buf<int>>();
-  sycltesters::test_sequence<HistogrammNaiveBuf<int>>(argc, argv, kid);
+  sycltesters::test_sequence<HistogrammNaiveBuf<int>>(argc, argv);
 }

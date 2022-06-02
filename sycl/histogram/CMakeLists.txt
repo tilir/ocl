@@ -2,6 +2,8 @@ set(KERNELS
   hist_naive
   hist_naive_acc
   hist_local
+  hist_local_acc
+  hist_local_acc_spec
   hist_private
 )
 
@@ -18,6 +20,8 @@ set(TESTING
   hist_naive_acc
   hist_naive_host
   hist_local
+  hist_local_acc
+  hist_local_acc_spec
   hist_private
 )
 

@@ -32,6 +32,7 @@ plot 'gemm_mkl.dat' with linespoints title 'MKL baseline',\
      'gemm_lsz8.dat' with linespoints t 'Local memory 8x8',\
      'gemm_lsz16.dat' with linespoints t 'Local memory 16x16'
 
+# Specialization constant effect
 set output "sgemm_lsz_spec.png"
 plot 'gemm_lsz16.dat' with linespoints t 'Local memory 16x16',\
      'gemm_lsz16_spec.dat' with linespoints t 'Local memory 16x16 with spec const'

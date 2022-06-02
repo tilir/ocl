@@ -148,22 +148,22 @@ inline void dump_config_info(Config &Cfg) {
 } // namespace hist
 
 template <typename T> class Histogramm {
-  cl::sycl::queue DeviceQueue_;
+  sycl::queue DeviceQueue_;
 
 public:
   using type = T;
-  Histogramm(cl::sycl::queue &DeviceQueue) : DeviceQueue_(DeviceQueue) {}
-  virtual EvtRet_t operator()(const T *Data, T *Bins, int NumData, int NumBins,
-                              EBundleTy ExeBundle) = 0;
-  cl::sycl::queue &Queue() { return DeviceQueue_; }
-  const cl::sycl::queue &Queue() const { return DeviceQueue_; }
+  Histogramm(sycl::queue &DeviceQueue) : DeviceQueue_(DeviceQueue) {}
+  virtual EvtRet_t operator()(const T *Data, T *Bins, int NumData,
+                              int NumBins) = 0;
+  sycl::queue &Queue() { return DeviceQueue_; }
+  const sycl::queue &Queue() const { return DeviceQueue_; }
   virtual ~Histogramm() {}
 };
 
 template <typename T> struct HistogrammHost : public Histogramm<T> {
-  HistogrammHost(cl::sycl::queue &DeviceQueue) : Histogramm<T>(DeviceQueue) {}
-  EvtRet_t operator()(const T *Data, T *Bins, int NumData, int NumBins,
-                      EBundleTy ExeBundle) override {
+  HistogrammHost(sycl::queue &DeviceQueue) : Histogramm<T>(DeviceQueue) {}
+  EvtRet_t operator()(const T *Data, T *Bins, int NumData,
+                      int NumBins) override {
     for (int i = 0; i < NumData; i++) {
       assert(Data[i] < NumBins);
       Bins[Data[i]] += 1;
@@ -178,17 +178,15 @@ template <typename T> class HistogrammTester {
   const T *Data_;
   int NumData_, NumBins_;
   std::vector<T> Bins_;
-  EBundleTy ExeBundle_;
 
 public:
-  HistogrammTester(Histogramm<T> &Hist, const T *Data, int NumData, int NumBins,
-                   EBundleTy ExeBundle)
+  HistogrammTester(Histogramm<T> &Hist, const T *Data, int NumData, int NumBins)
       : Hist_(Hist), Data_(Data), NumData_(NumData), NumBins_(NumBins),
-        Bins_(NumBins), ExeBundle_(ExeBundle) {}
+        Bins_(NumBins) {}
 
   std::pair<unsigned, unsigned> calculate(hist::Config Cfg) {
     Timer_.start();
-    EvtRet_t Ret = Hist_(Data_, Bins_.data(), NumData_, NumBins_, ExeBundle_);
+    EvtRet_t Ret = Hist_(Data_, Bins_.data(), NumData_, NumBins_);
     Timer_.stop();
     auto EvtTiming = getTime(Ret, Cfg.Detailed ? false : true);
     return {Timer_.elapsed(), EvtTiming};
@@ -209,13 +207,12 @@ void dump_hist(std::ostream &Os, std::string Name, const T *Data, int Sz) {
 }
 
 template <typename HistChildT, typename Ty>
-HistogrammTester<Ty> single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
-                                          Ty *Data, EBundleTy ExeBundle) {
+HistogrammTester<Ty> single_hist_sequence(sycl::queue &Q, hist::Config Cfg,
+                                          Ty *Data) {
 #if defined(MEASURE_NORMAL)
   qout << "Calculating host" << std::endl;
   HistogrammHost<Ty> HistH{Q}; // Q unused for this derived class
-  HistogrammTester<Ty> TesterH{HistH, Data, Cfg.Sz, Cfg.HistSz,
-                               /* unused */ ExeBundle};
+  HistogrammTester<Ty> TesterH{HistH, Data, Cfg.Sz, Cfg.HistSz};
   auto ElapsedH = TesterH.calculate(Cfg);
   qout << "Measured host time: " << ElapsedH.first / msec_per_sec << std::endl;
   Ty *HostData = TesterH.dataBins();
@@ -225,7 +222,7 @@ HistogrammTester<Ty> single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
 
   HistChildT Hist{Q, Cfg};
 
-  HistogrammTester<Ty> Tester{Hist, Data, Cfg.Sz, Cfg.HistSz, ExeBundle};
+  HistogrammTester<Ty> Tester{Hist, Data, Cfg.Sz, Cfg.HistSz};
 
   qout << "Calculating gpu" << std::endl;
   auto Elapsed = Tester.calculate(Cfg);
@@ -264,8 +261,7 @@ HistogrammTester<Ty> single_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
 #ifdef CIMG_ENABLE
 // implemented in terms of single_hist_sequence
 template <typename HistChildT>
-void cimg_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
-                        EBundleTy ExeBundle) {
+void cimg_hist_sequence(sycl::queue &Q, hist::Config Cfg) {
   using Ty = typename HistChildT::type;
   qout << "Initializing with image: " << Cfg.Image << std::endl;
   cimg_library::CImg<unsigned char> Image(Cfg.Image.c_str());
@@ -277,12 +273,9 @@ void cimg_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
   std::vector<Ty> DataR(Image.data(), Image.data() + Cfg.Sz);
   std::vector<Ty> DataG(Image.data() + Cfg.Sz, Image.data() + 2 * Cfg.Sz);
   std::vector<Ty> DataB(Image.data() + 2 * Cfg.Sz, Image.data() + 3 * Cfg.Sz);
-  auto TesterR =
-      single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataR.data(), ExeBundle);
-  auto TesterG =
-      single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataG.data(), ExeBundle);
-  auto TesterB =
-      single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataB.data(), ExeBundle);
+  auto TesterR = single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataR.data());
+  auto TesterG = single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataG.data());
+  auto TesterB = single_hist_sequence<HistChildT, Ty>(Q, Cfg, DataB.data());
 
   auto RMaxIt = std::max_element(TesterR.beginBins(), TesterR.endBins());
   auto GMaxIt = std::max_element(TesterG.beginBins(), TesterG.endBins());
@@ -309,8 +302,7 @@ void cimg_hist_sequence(cl::sycl::queue &Q, hist::Config Cfg,
 }
 #endif
 
-template <typename HistChildT>
-void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
+template <typename HistChildT> void test_sequence(int argc, char **argv) {
   try {
     using Ty = typename HistChildT::type;
     auto Cfg = hist::read_config(argc, argv);
@@ -318,12 +310,6 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     dump_config_info(Cfg);
     auto Q = set_queue();
     print_info(qout, Q.get_device());
-
-    IBundleTy SrcBundle = sycl::get_kernel_bundle<sycl::bundle_state::input>(
-        Q.get_context(), {kid});
-    // here we can do specialization constants and many more
-    OBundleTy ObjBundle = sycl::compile(SrcBundle);
-    EBundleTy ExeBundle = sycl::link(ObjBundle);
 
     if (Cfg.Image.empty()) {
       std::vector<Ty> Data;
@@ -333,17 +319,17 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
         std::fill(Data.begin(), Data.end(), 0);
       else
         rand_initialize(Data.begin(), Data.end(), 0, Cfg.HistSz - 1);
-      single_hist_sequence<HistChildT>(Q, Cfg, Data.data(), ExeBundle);
+      single_hist_sequence<HistChildT>(Q, Cfg, Data.data());
     } else {
 #ifdef CIMG_ENABLE
-      cimg_hist_sequence<HistChildT>(Q, Cfg, ExeBundle);
+      cimg_hist_sequence<HistChildT>(Q, Cfg);
 #else
       std::cerr << "Please build with CImg support" << std::endl;
       std::terminate();
 #endif // CIMG_ENABLE
     }
 
-  } catch (cl::sycl::exception const &err) {
+  } catch (sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
     abort();
   } catch (std::exception const &err) {

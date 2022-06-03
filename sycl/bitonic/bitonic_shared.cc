@@ -38,33 +38,26 @@ public:
     int N = std::countr_zero(Sz);
     auto &DeviceQueue = Queue();
 
-#ifdef HOST_ALLOC
-    T *A = sycl::malloc_host<T>(Sz, DeviceQueue);
-#else
-    T *A = sycl::malloc_shared<T>(Sz, DeviceQueue);
-#endif
+    T *A = sycl::malloc_device<T>(Sz, DeviceQueue);
     auto EvtCpyData = DeviceQueue.copy(Vec, A, Sz);
-    EvtCpyData.wait();
     ProfInfo.emplace_back(EvtCpyData, "Copy to device");
+    EvtCpyData.wait();
     for (int Step = 0; Step < N; Step++) {
       for (int Stage = Step; Stage >= 0; Stage--) {
-        int SeqLen = 1 << (Stage + 1);
-        int Power2 = 1 << (Step - Stage);
         sycl::range<1> NumOfItems{Sz};
-        sycl::range<1> BlockSize{Lsz_};
-        sycl::nd_range<1> Range{NumOfItems, BlockSize};
 
         // Offload the work to kernel.
         auto Evt = DeviceQueue.submit([=](sycl::handler &Cgh) {
-          auto Kernsort = [=](sycl::nd_item<1> Item) {
-            int I = Item.get_global_id(0);
-            int SeqNum = I / SeqLen;
-            int Odd = SeqNum / Power2;
-            bool Increasing = ((Odd % 2) == 0);
-            int HalfLen = SeqLen / 2;
+          auto Kernsort = [=](sycl::id<1> I) {
+            const int SeqLen = 1 << (Stage + 1);
+            const int Power2 = 1 << (Step - Stage);
+            const int SeqNum = I / SeqLen;
+            const int Odd = SeqNum / Power2;
+            const bool Increasing = ((Odd % 2) == 0);
+            const int HalfLen = SeqLen / 2;
 
             if (I < (SeqLen * SeqNum) + HalfLen) {
-              int J = I + HalfLen;
+              const int J = I + HalfLen;
               if (((A[I] > A[J]) && Increasing) ||
                   ((A[I] < A[J]) && !Increasing)) {
                 T Temp = A[I];
@@ -74,14 +67,14 @@ public:
             }
           };
 
-          Cgh.parallel_for<class bitonic_sort_shared<T>>(Range, Kernsort);
+          Cgh.parallel_for<class bitonic_sort_shared<T>>(NumOfItems, Kernsort);
         });
         ProfInfo.emplace_back(Evt, "Next iteration");
-        Evt.wait();
+        Evt.wait(); // no implicit task graph
       }
     }
-    EvtCpyData = DeviceQueue.copy(A, Vec, Sz);
-    ProfInfo.emplace_back(EvtCpyData, "Copy back");
+    auto EvtCpyBack = DeviceQueue.copy(A, Vec, Sz);
+    ProfInfo.emplace_back(EvtCpyBack, "Copy back");
     DeviceQueue.wait();
     sycl::free(A, DeviceQueue);
     return ProfInfo;

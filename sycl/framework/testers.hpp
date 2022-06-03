@@ -133,8 +133,9 @@ struct NamedEvent {
 using EvtVec_t = std::vector<NamedEvent>;
 using EvtRet_t = std::optional<EvtVec_t>;
 
-inline unsigned getTime(EvtRet_t Opt, bool Quiet = true) {
-  auto AccTime = 0, EvtIdx = 0;
+inline unsigned long long getTime(EvtRet_t Opt, bool Quiet = true) {
+  unsigned long long AccTime = 0;
+  int EvtIdx = 0;
   if (!Opt.has_value())
     return AccTime;
   auto &&Evts = Opt.value();
@@ -151,8 +152,8 @@ inline unsigned getTime(EvtRet_t Opt, bool Quiet = true) {
     auto Start = Evt.template get_profiling_info<EvtStart>();
     auto End = Evt.template get_profiling_info<EvtEnd>();
     auto Elapsed = End - Start;
-    qout << Elapsed / nsec_per_sec << "\n";
     AccTime += Elapsed;
+    qout << Elapsed / nsec_per_sec << " : " << AccTime / nsec_per_sec << "\n";
   }
   qout.set(Old);
   return AccTime;

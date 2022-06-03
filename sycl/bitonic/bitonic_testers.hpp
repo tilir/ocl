@@ -76,14 +76,14 @@ inline Config read_config(int argc, char **argv) {
 } // namespace bitonicsort
 
 template <typename T> class BitonicSort {
-  cl::sycl::queue DeviceQueue_;
+  sycl::queue DeviceQueue_;
 
 public:
   using type = T;
-  BitonicSort(cl::sycl::queue &DeviceQueue) : DeviceQueue_(DeviceQueue) {}
+  BitonicSort(sycl::queue &DeviceQueue) : DeviceQueue_(DeviceQueue) {}
   virtual EvtRet_t operator()(T *Vec, size_t Sz) = 0;
-  cl::sycl::queue &Queue() { return DeviceQueue_; }
-  const cl::sycl::queue &Queue() const { return DeviceQueue_; }
+  sycl::queue &Queue() { return DeviceQueue_; }
+  const sycl::queue &Queue() const { return DeviceQueue_; }
   virtual ~BitonicSort() {}
 };
 
@@ -105,11 +105,11 @@ template <typename T> struct BitonicSortHost : public BitonicSort<T> {
   }
 
 public:
-  BitonicSortHost(cl::sycl::queue &DeviceQueue) : BitonicSort<T>(DeviceQueue) {}
+  BitonicSortHost(sycl::queue &DeviceQueue) : BitonicSort<T>(DeviceQueue) {}
   EvtRet_t operator()(T *Vec, size_t Sz) override {
     assert(Vec);
-    int NSeq, SeqLen, Step, Stage, Power2;
 #if CHECK_BITONIC_CPU
+    int Step, Stage;
     if (std::popcount(Sz) != 1 || Sz < 2)
       throw std::runtime_error("Please use only power-of-two arrays");
 
@@ -117,6 +117,7 @@ public:
 
     for (Step = 0; Step < N; Step++) {
       for (Stage = Step; Stage >= 0; Stage--) {
+        int NSeq, SeqLen, Power2;
         NSeq = 1 << (N - Stage - 1);
         SeqLen = 1 << (Stage + 1);
         Power2 = 1 << (Step - Stage);
@@ -150,11 +151,10 @@ public:
     A_.assign(begin, end);
   }
 
-  std::pair<unsigned, unsigned> calculate() {
-    unsigned EvtTiming = 0;
+  std::pair<unsigned, unsigned long long> calculate() {
     Timer_.start();
     EvtRet_t Ret = Sorter_(A_.data(), A_.size());
-    EvtTiming += getTime(Ret, Cfg_.Detailed ? false : true);
+    auto EvtTiming = getTime(Ret, Cfg_.Detailed ? false : true);
     Timer_.stop();
     return {Timer_.elapsed(), EvtTiming};
   }
@@ -238,7 +238,7 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
       qout << Cfg.Size << " " << ExecTime << "\n";
       qout.set(Cfg.Quiet);
     }
-  } catch (cl::sycl::exception const &err) {
+  } catch (sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";
     std::terminate();
   } catch (std::exception const &err) {

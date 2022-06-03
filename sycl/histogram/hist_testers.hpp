@@ -184,7 +184,7 @@ public:
       : Hist_(Hist), Data_(Data), NumData_(NumData), NumBins_(NumBins),
         Bins_(NumBins) {}
 
-  std::pair<unsigned, unsigned> calculate(hist::Config Cfg) {
+  std::pair<unsigned, unsigned long long> calculate(hist::Config Cfg) {
     Timer_.start();
     EvtRet_t Ret = Hist_(Data_, Bins_.data(), NumData_, NumBins_);
     Timer_.stop();

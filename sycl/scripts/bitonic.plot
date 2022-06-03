@@ -3,9 +3,11 @@
 # Gnuplot script for bitonic experiments
 #
 # collect data with bitonic.rb
+# ..\scripts\bitonic.rb -p bitonic\bitonicsort.exe -o bitonicsort.dat
+# ..\scripts\bitonic.rb -p bitonic\bitonic_shared.exe -o bitonic_shared.dat
 #
 # run plotter with
-# > gnuplot -c bitonic.plot
+# > gnuplot -persist -c ..\scripts\bitonic.plot
 #
 #------------------------------------------------------------------------------
 #
@@ -14,14 +16,14 @@
 #
 #------------------------------------------------------------------------------
 
-# set term pdf
+set term png
 set grid
 set key left top
 set xlabel "Array size (logarithmic)"
 set ylabel "time (seconds)"
 
-# 1D vs ND vs ND+local
-# set output "bitonic_nd.pdf"
-plot 'bitonic_simple.dat' with linespoints t '1D range',\
-     'bitonic_nd_1.dat' with linespoints title 'ND range, local memory = 1',\
-     'bitonic_nd_32.dat' with linespoints title 'ND range, local memory = 32'
+set output "bitonic_baseline.png"
+plot 'bitonicsort.dat' with linespoints t 'Accessor',\
+     'bitonic_shared.dat' with linespoints t 'Shared memory',
+     
+     

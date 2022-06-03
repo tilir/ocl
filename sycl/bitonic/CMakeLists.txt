@@ -8,15 +8,9 @@ foreach(KERNEL ${KERNELS})
   buildv(${KERNEL} ${KERNEL}.cc)
 endforeach()
 
-# special parameters
-buildv(bitonic_simple bitonicsort.cc "SIMPLERANGE=1")
-buildv(bitonic_host bitonic_shared.cc "HOST_ALLOC=1")
-
 set(TESTING
   bitonicsort
   bitonic_shared
-  bitonic_simple
-  bitonic_host
 )
 
 foreach(KERNEL ${TESTING})

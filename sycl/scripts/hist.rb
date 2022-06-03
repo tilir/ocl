@@ -17,7 +17,7 @@ require 'open3'
 require 'optparse'
 require 'ostruct'
 
-puts "Running SGEMMs";
+puts "Running Histogramms";
 
 ARGV << '-h' if ARGV.empty?
 

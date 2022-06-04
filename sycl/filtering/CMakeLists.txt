@@ -3,7 +3,6 @@ set(KERNELS
   filtering_sampler_vectorized
   filtering_buffer
   filtering_shared_vectorized
-# exclude from testing
   filtering_local
 )
 
@@ -17,6 +16,7 @@ set(TESTING
   filtering_sampler_vectorized
   filtering_buffer
   filtering_shared_vectorized
+  filtering_local
 )
 
 foreach(KERNEL ${TESTING})

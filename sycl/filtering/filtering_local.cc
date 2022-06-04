@@ -64,13 +64,23 @@ public:
     sycl::range<2> LDims(LSZ, LSZ);
 
     // we need more local memory to handle +J and -J
-    const int LMEM = (LSZ + FiltSize) * (LSZ + FiltSize);
+    // say LSZ = 4 and filter is 3x3, then we need local memory 6x6 as shown
+    // below
+    // ........
+    // ........
+    // ..xxxx..
+    // ..xxxx..
+    // ..xxxx..
+    // ..xxxx..
+    // ........
+    // ........
+    const int LMEM = LSZ + HalfWidth * 2;
     sycl::nd_range<2> DataSz{Dims, LDims};
+    sycl::range<2> LocalMemorySize{LMEM, LMEM};
+    using LTy = sycl::accessor<sycl::float4, 2, sycl_read_write, sycl_local>;
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       Cgh.depends_on(EvtCpyData);
-      using LTy = sycl::accessor<sycl::float4, 1, sycl_read_write, sycl_local>;
-      sycl::range<1> LocalMemorySize{LMEM};
       LTy Cache{LocalMemorySize, Cgh};
 
       auto KernFilter = [=](sycl::nd_item<2> WorkItem) {
@@ -79,64 +89,35 @@ public:
         const int LX = WorkItem.get_local_id(0);
         const int LY = WorkItem.get_local_id(1);
 
-        const int RowOffset = GY * ImW;
-        const int N = GX + RowOffset;
+        // workgroup start in global
+        const int WX = WorkItem.get_group(0) * LSZ;
+        const int WY = WorkItem.get_group(1) * LSZ;
 
-        const int LocalRowLen = HalfWidth * 2 + LSZ;
-        const int LocalRowOffset = (LY + HalfWidth) * LocalRowLen;
-        const int L = LocalRowOffset + LX + HalfWidth;
-
-        // caching current pixel
-        Cache[L] = InPtr[N];
-
-        if (GX < HalfWidth || GX > ImW - HalfWidth - 1 || GY < HalfWidth ||
-            GY > ImH - HalfWidth - 1) {
-          // no computation for this pixel, sync and exit
-          WorkItem.barrier(sycl_local_fence);
-          return;
+        // caching current pixels
+        for (int I = LY; I < LMEM; I += LSZ) {
+          const int Row = WY + I - HalfWidth;
+          for (int J = LX; J < LMEM; J += LSZ) {
+            const int Col = WX + J - HalfWidth;
+            if (Row < ImH && Col < ImW && Row >= 0 && Col >= 0)
+              Cache[J][I] = InPtr[Row * ImW + Col];
+            else
+              Cache[J][I] = 0;
+          }
         }
-
-        // copy additional elements
-        int LocalColOffset = -1;
-        int GlobalColOffset = -1;
-
-        if (LX < HalfWidth) {
-          LocalColOffset = LX;
-          GlobalColOffset = -HalfWidth;
-          Cache[LocalRowOffset + LX] = InPtr[N - HalfWidth];
-        } else if (LX >= LSZ - HalfWidth) {
-          LocalColOffset = LX + HalfWidth * 2;
-          GlobalColOffset = HalfWidth;
-          Cache[L + HalfWidth] = InPtr[N + HalfWidth];
-        }
-
-        if (LY < HalfWidth) {
-          Cache[LY * LocalRowLen + LX + HalfWidth] = InPtr[N - HalfWidth * ImW];
-          if (LocalColOffset > 0)
-            Cache[LY * LocalRowLen + LocalColOffset] =
-                InPtr[N - HalfWidth * ImW + GlobalColOffset];
-        } else if (LY >= LSZ - HalfWidth) {
-          const int Offset = (LY + HalfWidth * 2) * LocalRowLen;
-          Cache[Offset + LX + HalfWidth] = InPtr[N + HalfWidth * ImW];
-          if (LocalColOffset > 0)
-            Cache[Offset + LocalColOffset] =
-                InPtr[N + HalfWidth * ImW + GlobalColOffset];
-        }
-
-        // wait additional elements to be copied
         WorkItem.barrier(sycl_local_fence);
 
         // calculate convolution with cache
         sycl::float4 Sum = {0.0f, 0.0f, 0.0f, 1.0f};
         int FiltIndex = 0;
+
         for (int I = -HalfWidth; I <= HalfWidth; ++I) {
           for (int J = -HalfWidth; J <= HalfWidth; ++J) {
-            sycl::float4 Pixel = Cache[L + I * LocalRowLen + J];
+            sycl::float4 Pixel = Cache[LX + HalfWidth + J][LY + HalfWidth + I];
             Sum += Pixel * FiltPtr[FiltIndex]; // vectorized
             FiltIndex += 1;
           }
         }
-        OutPtr[N] = Sum;
+        OutPtr[GY * ImW + GX] = Sum;
       };
 
       Cgh.parallel_for<class filter_2d_local>(DataSz, KernFilter);

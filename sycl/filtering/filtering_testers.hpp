@@ -66,11 +66,12 @@ namespace sycltesters {
 // so this namespace is required in each.
 namespace filter {
 
-constexpr int DEF_LSZ = 8;
+constexpr int DEF_LSZ = 16;
 constexpr int DEF_DETAILED = 0;
-constexpr int DEF_IMSZ = 100;
+constexpr int DEF_IMSZ = 256;
 constexpr int DEF_FILTSZ = 3;
 constexpr int DEF_QUIET = 0;
+constexpr int DEF_NOVIS = 0;
 
 // min/max for random filter before normalization
 constexpr int MINVAL = -16;
@@ -96,7 +97,7 @@ inline Config read_config(int argc, char **argv) {
                               "random filter (normalized)");
   OptParser.template add<int>("lsz", DEF_LSZ, "local iteration space");
   OptParser.template add<int>("detailed", DEF_DETAILED, "detailed event view");
-  OptParser.template add<int>("novis", DEF_LSZ,
+  OptParser.template add<int>("novis", DEF_NOVIS,
                               "disable graphic visualization");
   OptParser.template add<int>("quiet", DEF_QUIET, "quiet mode for bulk runs");
   OptParser.parse(argc, argv);

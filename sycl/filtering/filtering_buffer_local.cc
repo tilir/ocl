@@ -43,27 +43,41 @@ public:
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
 
-    const int NumData = ImW * ImH;
-    sycl::float4 *OutPtr = malloc_device<sycl::float4>(NumData, DeviceQueue);
-    sycl::float4 *InPtr = malloc_device<sycl::float4>(NumData, DeviceQueue);
-    auto EvtCpyData = DeviceQueue.copy(SrcData, InPtr, NumData);
-    ProfInfo.emplace_back(EvtCpyData, "Copy to device");
+    const int LSZ = Cfg_.LocSz;
+    sycl::range<2> Dims(ImW, ImH);
+    sycl::range<2> LDims(LSZ, LSZ);
 
+    sycl::buffer<sycl::float4, 1> Dst(DstData, ImW * ImH);
+    sycl::buffer<sycl::float4, 1> Src(SrcData, ImW * ImH);
+    Src.set_final_data(nullptr);
     int FiltSize = Filt.sqrt_size();
     int DataSize = FiltSize * FiltSize;
     int HalfWidth = FiltSize / 2;
 
-    // vectorize filter
+#if !defined(FILTBUF)
     sycl::float4 *FiltPtr = malloc_shared<sycl::float4>(DataSize, DeviceQueue);
     const float *FiltData = Filt.data();
     for (int I = 0; I < DataSize; ++I) {
       float FiltChannel = FiltData[I];
       FiltPtr[I] = sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
     }
+#endif
 
-    const int LSZ = Cfg_.LocSz;
-    sycl::range<2> Dims(ImW, ImH);
-    sycl::range<2> LDims(LSZ, LSZ);
+// strange bug: everything hangs if filter is read as a buffer
+#if defined(FILTBUF)
+    sycl::buffer<sycl::float4, 1> FiltBuffer(DataSize);
+    auto FiltHostAcc = FiltBuffer.template get_access<sycl_write>();
+    const float *FiltData = Filt.data();
+    for (int I = 0; I < DataSize; ++I) {
+      float FiltChannel = FiltData[I];
+      FiltHostAcc[I] =
+          sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
+    }
+#endif
+
+    // explicit accessor types
+    using ImReadTy = sycl::accessor<sycl::float4, 1, sycl_read, sycl_constant>;
+    using ImWriteTy = sycl::accessor<sycl::float4, 1, sycl_write, sycl_global>;
 
     // we need more local memory to handle +J and -J
     // say LSZ = 4 and filter is 3x3, then we need local memory 6x6 as shown
@@ -82,8 +96,12 @@ public:
     using LTy = sycl::accessor<sycl::float4, 2, sycl_read_write, sycl_local>;
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
-      Cgh.depends_on(EvtCpyData);
+      ImReadTy InPtr(Src, Cgh);
+      ImWriteTy OutPtr(Dst, Cgh);
       LTy Cache{LocalMemorySize, Cgh};
+#if defined(FILTBUF)
+      auto FiltPtr = FiltBuffer.template get_access<sycl_read>();
+#endif
 
       auto KernFilter = [=](sycl::nd_item<2> WorkItem) {
         const int GX = WorkItem.get_global_id(0);
@@ -125,13 +143,10 @@ public:
       Cgh.parallel_for<class filter_2d_local>(DataSz, KernFilter);
     });
     ProfInfo.emplace_back(Evt, "Convolution");
-
-    auto EvtCpyBack = DeviceQueue.copy(OutPtr, DstData, NumData, Evt);
-    ProfInfo.emplace_back(EvtCpyBack, "Copy Back");
     DeviceQueue.wait();
-    sycl::free(InPtr, DeviceQueue);
-    sycl::free(OutPtr, DeviceQueue);
+#if !defined(FILTBUF)
     sycl::free(FiltPtr, DeviceQueue);
+#endif
     return ProfInfo;
   }
 };

@@ -1,10 +1,10 @@
 set(KERNELS
+  filtering_sampler_nonvectorized
   filtering_sampler
-  filtering_sampler_vectorized
-  filtering_sampler_local # really vectorized + local
+  filtering_shared
   filtering_buffer
-  filtering_shared_vectorized
-  filtering_local # really vectorized + shared + local
+  filtering_sampler_local
+  filtering_buffer_local
 )
 
 # build kernels
@@ -13,12 +13,12 @@ foreach(KERNEL ${KERNELS})
 endforeach()
 
 set(TESTING  
+  filtering_sampler_nonvectorized
   filtering_sampler
-  filtering_sampler_vectorized
-  filtering_sampler_local
+  filtering_shared
   filtering_buffer
-  filtering_shared_vectorized
-  filtering_local
+  filtering_sampler_local
+  filtering_buffer_local
 )
 
 foreach(KERNEL ${TESTING})

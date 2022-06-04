@@ -53,13 +53,26 @@ public:
     int DataSize = FiltSize * FiltSize;
     int HalfWidth = FiltSize / 2;
 
-    // vectorize filter
+#if !defined(FILTBUF)
     sycl::float4 *FiltPtr = malloc_shared<sycl::float4>(DataSize, DeviceQueue);
     const float *FiltData = Filt.data();
     for (int I = 0; I < DataSize; ++I) {
       float FiltChannel = FiltData[I];
       FiltPtr[I] = sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
     }
+#endif
+
+// strange bug: everything hangs if filter is read as a buffer
+#if defined(FILTBUF)
+    sycl::buffer<sycl::float4, 1> FiltBuffer(DataSize);
+    auto FiltHostAcc = FiltBuffer.template get_access<sycl_write>();
+    const float *FiltData = Filt.data();
+    for (int I = 0; I < DataSize; ++I) {
+      float FiltChannel = FiltData[I];
+      FiltHostAcc[I] =
+          sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
+    }
+#endif
 
     // we need more local memory to handle +J and -J
     // say LSZ = 4 and filter is 3x3, then we need local memory 6x6 as shown
@@ -75,15 +88,17 @@ public:
     const int LMEM = LSZ + HalfWidth * 2;
     sycl::nd_range<2> DataSz{Dims, LDims};
     sycl::range<2> LocalMemorySize{LMEM, LMEM};
+    using ImAccTy = sycl::accessor<sycl::float4, 2, sycl_read, sycl_image>;
+    using ImWriteTy = sycl::accessor<sycl::float4, 2, sycl_write, sycl_image>;
     using LTy = sycl::accessor<sycl::float4, 2, sycl_read_write, sycl_local>;
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       LTy Cache{LocalMemorySize, Cgh};
-
-      using ImAccTy = sycl::accessor<sycl::float4, 2, sycl_read, sycl_image>;
-      using ImWriteTy = sycl::accessor<sycl::float4, 2, sycl_write, sycl_image>;
       ImAccTy InPtr(Src, Cgh);    // image to read from
       ImWriteTy OutPtr(Dst, Cgh); // image to write to
+#if defined(FILTBUF)
+      auto FiltPtr = FiltBuffer.template get_access<sycl_read>();
+#endif
 
       // sampler for image read
       sycl::sampler Sampler(sycl::coordinate_normalization_mode::unnormalized,
@@ -130,6 +145,9 @@ public:
     });
     ProfInfo.emplace_back(Evt, "Convolution");
     DeviceQueue.wait();
+#if !defined(FILTBUF)
+    sycl::free(FiltPtr, DeviceQueue);
+#endif
     return ProfInfo;
   }
 };

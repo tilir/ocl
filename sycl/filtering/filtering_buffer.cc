@@ -43,18 +43,38 @@ public:
     int FiltSize = Filt.sqrt_size();
     int DataSize = FiltSize * FiltSize;
     int HalfWidth = FiltSize / 2;
-    sycl::buffer<float, 1> FiltData(Filt.data(), DataSize);
-    FiltData.set_final_data(nullptr);
+
+#if !defined(FILTBUF)
+    sycl::float4 *FiltPtr = malloc_shared<sycl::float4>(DataSize, DeviceQueue);
+    const float *FiltData = Filt.data();
+    for (int I = 0; I < DataSize; ++I) {
+      float FiltChannel = FiltData[I];
+      FiltPtr[I] = sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
+    }
+#endif
+
+// strange bug: everything hangs if filter is read as a buffer
+#if defined(FILTBUF)
+    sycl::buffer<sycl::float4, 1> FiltBuffer(DataSize);
+    auto FiltHostAcc = FiltBuffer.template get_access<sycl_write>();
+    const float *FiltData = Filt.data();
+    for (int I = 0; I < DataSize; ++I) {
+      float FiltChannel = FiltData[I];
+      FiltHostAcc[I] =
+          sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
+    }
+#endif
 
     // explicit accessor types
     using ImReadTy = sycl::accessor<sycl::float4, 1, sycl_read, sycl_constant>;
     using ImWriteTy = sycl::accessor<sycl::float4, 1, sycl_write, sycl_global>;
-    using FiltAccTy = sycl::accessor<float, 1, sycl_read, sycl_constant>;
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       ImReadTy InPtr(Src, Cgh);
       ImWriteTy OutPtr(Dst, Cgh);
-      FiltAccTy FiltPtr(FiltData, Cgh);
+#if defined(FILTBUF)
+      auto FiltPtr = FiltBuffer.template get_access<sycl_read>();
+#endif
 
       auto KernFilter = [=](sycl::id<2> Id) {
         const size_t Column = Id.get(0);
@@ -66,12 +86,10 @@ public:
             const auto X = Column + J;
             const auto Y = Row + I;
             // we have this in-bounds check for image processing
-            // sampler does it behind the scenes (in hardware really)
+            // sampler does it behind the scenes (in hardware)
             if (X >= 0 && X < ImW && Y >= 0 && Y < ImH) {
               sycl::float4 Pixel = InPtr[Y * ImW + X];
-              Sum[0] += Pixel[0] * FiltPtr[FiltIndex];
-              Sum[1] += Pixel[1] * FiltPtr[FiltIndex];
-              Sum[2] += Pixel[2] * FiltPtr[FiltIndex];
+              Sum += Pixel * FiltPtr[FiltIndex];
             }
             FiltIndex += 1;
           }
@@ -84,6 +102,9 @@ public:
 
     DeviceQueue.wait(); // or explicit host accessor to Dst
     ProfInfo.push_back(Evt);
+#if !defined(FILTBUF)
+    sycl::free(FiltPtr, DeviceQueue);
+#endif
     return ProfInfo;
   }
 };

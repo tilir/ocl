@@ -272,7 +272,7 @@ FilterTester single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
   // Quiet mode output: filter size, elapsed time
   if (Cfg.Quiet) {
     qout.set(!Cfg.Quiet);
-    qout << Filt.sqrt_size() << " " << ExecTime << "\n";
+    qout << ImW << " " << ExecTime << "\n";
     qout.set(Cfg.Quiet);
   }
 

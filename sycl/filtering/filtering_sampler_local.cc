@@ -41,11 +41,11 @@ public:
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
 
-    const int NumData = ImW * ImH;
-    sycl::float4 *OutPtr = malloc_device<sycl::float4>(NumData, DeviceQueue);
-    sycl::float4 *InPtr = malloc_device<sycl::float4>(NumData, DeviceQueue);
-    auto EvtCpyData = DeviceQueue.copy(SrcData, InPtr, NumData);
-    ProfInfo.emplace_back(EvtCpyData, "Copy to device");
+    const int LSZ = Cfg_.LocSz;
+    sycl::range<2> LDims(LSZ, LSZ);
+    sycl::range<2> Dims(ImW, ImH);
+    sycl::image<2> Dst(DstData, sycl_rgba, sycl_fp32, Dims);
+    sycl::image<2> Src(SrcData, sycl_rgba, sycl_fp32, Dims);
 
     int FiltSize = Filt.sqrt_size();
     int DataSize = FiltSize * FiltSize;
@@ -58,10 +58,6 @@ public:
       float FiltChannel = FiltData[I];
       FiltPtr[I] = sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
     }
-
-    const int LSZ = Cfg_.LocSz;
-    sycl::range<2> Dims(ImW, ImH);
-    sycl::range<2> LDims(LSZ, LSZ);
 
     // we need more local memory to handle +J and -J
     // say LSZ = 4 and filter is 3x3, then we need local memory 6x6 as shown
@@ -80,8 +76,17 @@ public:
     using LTy = sycl::accessor<sycl::float4, 2, sycl_read_write, sycl_local>;
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
-      Cgh.depends_on(EvtCpyData);
       LTy Cache{LocalMemorySize, Cgh};
+
+      using ImAccTy = sycl::accessor<sycl::float4, 2, sycl_read, sycl_image>;
+      using ImWriteTy = sycl::accessor<sycl::float4, 2, sycl_write, sycl_image>;
+      ImAccTy InPtr(Src, Cgh);    // image to read from
+      ImWriteTy OutPtr(Dst, Cgh); // image to write to
+
+      // sampler for image read
+      sycl::sampler Sampler(sycl::coordinate_normalization_mode::unnormalized,
+                            sycl::addressing_mode::clamp,
+                            sycl::filtering_mode::nearest);
 
       auto KernFilter = [=](sycl::nd_item<2> WorkItem) {
         const int GX = WorkItem.get_global_id(0);
@@ -98,10 +103,8 @@ public:
           const int Row = WY + I - HalfWidth;
           for (int J = LX; J < LMEM; J += LSZ) {
             const int Col = WX + J - HalfWidth;
-            if (Row < ImH && Col < ImW && Row >= 0 && Col >= 0)
-              Cache[J][I] = InPtr[Row * ImW + Col];
-            else
-              Cache[J][I] = 0;
+            sycl::int2 Coords = {Col, Row};
+            Cache[J][I] = InPtr.read(Coords, Sampler);
           }
         }
         WorkItem.barrier(sycl_local_fence);
@@ -117,19 +120,14 @@ public:
             FiltIndex += 1;
           }
         }
-        OutPtr[GY * ImW + GX] = Sum;
+        sycl::int2 Coords = {GX, GY};
+        OutPtr.write(Coords, Sum);
       };
 
       Cgh.parallel_for<class filter_2d_local>(DataSz, KernFilter);
     });
     ProfInfo.emplace_back(Evt, "Convolution");
-
-    auto EvtCpyBack = DeviceQueue.copy(OutPtr, DstData, NumData, Evt);
-    ProfInfo.emplace_back(EvtCpyBack, "Copy Back");
     DeviceQueue.wait();
-    sycl::free(InPtr, DeviceQueue);
-    sycl::free(OutPtr, DeviceQueue);
-    sycl::free(FiltPtr, DeviceQueue);
     return ProfInfo;
   }
 };

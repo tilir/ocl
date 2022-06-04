@@ -1,64 +1,7 @@
 TGLLP, OneAPI
 
-(1) Bitonic sort
-The very existing of local size makes magic happen
-
-bitonic\bitonicsort.exe -size=23
-bitonic\bitonicsort.exe -size=23 -lsz=16
-
-For both host (CPU) time is ~2.4 seconds
-GPU time is 4.5 seconds and 0.7 seconds respectively
-
-(2) GEMM: local size=1 increases but local size=16 decreases time compared to simple iteration
-
-sgemm\matmult.exe
-0.13
-
-sgemm\matmult_local.exe
-2.4
-
-sgemm\matmult_local.exe -lsz=16
-0.13
-
-Also just existing of local space makes good things to happen:
-sgemm\matmult.exe -lsz=16
-0.13
-
-(3) Accumulator in private mem
-
-sgemm\matmult.exe -ax=4096 -ay=4096 -by=2048
-sgemm\matmult_nopriv.exe -ax=4096 -ay=4096 -by=2048
-
-Difference on GPU 3 seconds vs 4 seconds
-On such sizes -lsz=16 speedup is almost invisible for both
-
-On the other hand:
-
-sgemm\matmult_local.exe -ax=4096 -ay=4096 -by=2048 -lsz=16
-Here we can see 0.8 seconds (!)
-
-(4) Bitonic sort
-
-Host std::sort reference is 2.850 seconds
-
-Sort in shared memory for integrated graphics is 1.5 times faster.
-
-> bitonic\bitonicsort.exe -size=25 -lsz=32
-Measured time: 2.994
-Pure execution time: 2.78883
-
-> bitonic\bitonic_shared.exe -size=25 -lsz=32
-Measured time: 1.493
-Pure execution time: 1.30003
-
-Even more: ineffective kernel with loop on GPU is increadibly effective
-
-> bitonic_loop_shared.exe -size=25 -lsz=32
-Measured time: 0.429
-Pure execution time: 0.282504
-
-If both loops are offloaded, it is not a big issue for TGLLP at least and results are even better
-
->bitonic\bitonic_twice_shared.exe -size=25 -lsz=32
-Measured time: 0.39
-Pure execution time: 0.259704
+(1) GEMM: local size=1 increases but local size=16 decreases time compared to simple iteration
+(2) Histogram: we can see difference in stateful vs stateless memory
+(3) Filter: difference is really huge sampler-using filter works several times faster
+            local memory almost equalizes things
+(4)

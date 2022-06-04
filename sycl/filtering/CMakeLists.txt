@@ -1,9 +1,10 @@
 set(KERNELS
   filtering_sampler
   filtering_sampler_vectorized
+  filtering_sampler_local # really vectorized + local
   filtering_buffer
   filtering_shared_vectorized
-  filtering_local
+  filtering_local # really vectorized + shared + local
 )
 
 # build kernels

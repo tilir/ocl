@@ -207,8 +207,8 @@ public:
       : Filter_(Reduce), Cfg_(Cfg), ImW_(ImW), ImH_(ImH),
         DstBuffer_(ImW * ImH) {}
 
-  std::pair<unsigned, unsigned> calculate(sycl::float4 *SrcData,
-                                          drawer::Filter &Filt) {
+  using CalcDataTy = std::pair<unsigned, unsigned long long>;
+  CalcDataTy calculate(sycl::float4 *SrcData, drawer::Filter &Filt) {
     Timer Tm;
     Tm.start();
     EvtRet_t Ret = Filter_(DstBuffer_.data(), SrcData, ImW_, ImH_, Filt);

@@ -24,13 +24,12 @@ using ConfigTy = sycltesters::filter::Config;
 class filter_2d;
 
 class FilterSampler : public sycltesters::Filter {
-  using sycltesters::Filter::Bundle;
   using sycltesters::Filter::Queue;
   ConfigTy Cfg_;
 
 public:
-  FilterSampler(cl::sycl::queue &DeviceQueue, EBundleTy ExeBundle, ConfigTy Cfg)
-      : sycltesters::Filter(DeviceQueue, ExeBundle), Cfg_(Cfg) {}
+  FilterSampler(cl::sycl::queue &DeviceQueue, ConfigTy Cfg)
+      : sycltesters::Filter(DeviceQueue), Cfg_(Cfg) {}
 
   sycltesters::EvtRet_t operator()(sycl::float4 *DstData, sycl::float4 *SrcData,
                                    int ImW, int ImH,
@@ -90,6 +89,5 @@ public:
 };
 
 int main(int argc, char **argv) {
-  sycl::kernel_id kid = sycl::get_kernel_id<class filter_2d>();
-  sycltesters::test_sequence<FilterSampler>(argc, argv, kid);
+  sycltesters::test_sequence<FilterSampler>(argc, argv);
 }

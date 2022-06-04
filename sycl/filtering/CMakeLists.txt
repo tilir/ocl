@@ -15,6 +15,7 @@ endforeach()
 set(TESTING  
   filtering_sampler
   filtering_sampler_vectorized
+  filtering_sampler_local
   filtering_buffer
   filtering_shared_vectorized
   filtering_local

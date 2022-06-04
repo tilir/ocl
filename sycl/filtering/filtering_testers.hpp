@@ -82,7 +82,7 @@ constexpr int NBOXES = 10;
 
 struct Config {
   bool Detailed, RandImage = false, RandFilter = false, Visualize = true,
-                 Quiet = false;
+                 Quiet = false, LocOverflow = false;
   int LocSz, RandImSz, RandFiltSz;
   std::string ImagePath, FilterPath;
 };
@@ -138,26 +138,54 @@ inline void dump_config_info(Config &Cfg) {
     qout << "Screen visualization\n";
 }
 
+inline void check_device_props(sycl::device D, Config &Cfg,
+                               drawer::Filter &Filt) {
+  if (!D.has(sycl::aspect::image))
+    throw std::runtime_error("Image support required");
+
+  constexpr auto max_lsz = sycl::info::device::max_work_group_size;
+  const auto MLSZ = D.template get_info<max_lsz>();
+  qout << "Max WG size: " << MLSZ << std::endl;
+
+  if (Cfg.LocSz * Cfg.LocSz > MLSZ)
+    throw std::runtime_error("Local work group of this size not supported");
+
+  constexpr auto max_gmem = sycl::info::device::global_mem_size;
+  constexpr int bytes_to_kilobytes = 1024;
+  const auto MaxGMEM = D.template get_info<max_gmem>() / bytes_to_kilobytes;
+  qout << "Max global mem size: " << MaxGMEM << " kbytes" << std::endl;
+
+  constexpr auto max_lmem = sycl::info::device::local_mem_size;
+  const auto MaxLMEM = D.template get_info<max_lmem>();
+  qout << "Max local mem size: " << MaxLMEM << " bytes" << std::endl;
+
+  int FiltSize = Filt.sqrt_size();
+  int HalfWidth = FiltSize / 2;
+  int LocMem = Cfg.LocSz + HalfWidth * 2;
+  int ReqMem = LocMem * LocMem * sizeof(sycl::float4);
+  if (ReqMem > MaxLMEM) {
+    qout << "Warning: " << ReqMem << " bytes of local memory will be required "
+         << "which exceeds max local memory" << std::endl;
+    Cfg.LocOverflow = 1;
+  }
+}
+
 } // namespace filter
 
 class Filter {
   sycl::queue DeviceQueue_;
-  EBundleTy ExeBundle_;
 
 public:
-  Filter(sycl::queue &DeviceQueue, EBundleTy ExeBundle)
-      : DeviceQueue_(DeviceQueue), ExeBundle_(ExeBundle) {}
+  Filter(sycl::queue &DeviceQueue) : DeviceQueue_(DeviceQueue) {}
   virtual EvtRet_t operator()(sycl::float4 *DstData, sycl::float4 *SrcData,
                               int ImW, int ImH, drawer::Filter &Filt) = 0;
   sycl::queue &Queue() { return DeviceQueue_; }
-  EBundleTy Bundle() const { return ExeBundle_; }
   const sycl::queue &Queue() const { return DeviceQueue_; }
   virtual ~Filter() {}
 };
 
 struct FilterHost : public Filter {
-  FilterHost(sycl::queue &DeviceQueue, EBundleTy ExeBundle)
-      : Filter(DeviceQueue, ExeBundle) {}
+  FilterHost(sycl::queue &DeviceQueue) : Filter(DeviceQueue) {}
   EvtRet_t operator()(sycl::float4 *DstData, sycl::float4 *SrcData, int ImW,
                       int ImH, drawer::Filter &Filt) override {
     auto *FiltPtr = Filt.data();
@@ -223,17 +251,17 @@ public:
 template <typename FilterChildT>
 FilterTester single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
                                     sycl::float4 *SrcData, int ImW, int ImH,
-                                    drawer::Filter &Filt, EBundleTy ExeBundle) {
+                                    drawer::Filter &Filt) {
 
 #if defined(MEASURE_NORMAL)
   qout << "Calculating host\n";
-  FilterHost FilterHost{Q, ExeBundle}; // both args here unused
+  FilterHost FilterHost{Q}; // arg unused
   FilterTester TesterH{FilterHost, Cfg, ImW, ImH};
   auto ElapsedH = TesterH.calculate(SrcData, Filt);
   qout << "Measured host time: " << ElapsedH.first / msec_per_sec << "\n";
 #endif
 
-  FilterChildT FilterGPU{Q, ExeBundle, Cfg};
+  FilterChildT FilterGPU{Q, Cfg};
   FilterTester Tester{FilterGPU, Cfg, ImW, ImH};
   qout << "Calculating GPU\n";
   auto Elapsed = Tester.calculate(SrcData, Filt);
@@ -268,7 +296,7 @@ FilterTester single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
   return Tester;
 }
 
-drawer::Filter init_filter(filter::Config Cfg) {
+inline drawer::Filter init_filter(filter::Config Cfg) {
   if (!Cfg.FilterPath.empty()) {
     qout << "Reading filter: " << Cfg.FilterPath << "\n";
     drawer::Filter Filt(Cfg.FilterPath);
@@ -292,7 +320,7 @@ drawer::Filter init_filter(filter::Config Cfg) {
 
 using ImageTy = cimg_library::CImg<unsigned char>;
 
-ImageTy init_image(filter::Config Cfg) {
+inline ImageTy init_image(filter::Config Cfg) {
   if (!Cfg.ImagePath.empty()) {
     qout << "Initializing with image: " << Cfg.ImagePath << "\n";
     ImageTy Image(Cfg.ImagePath.c_str());
@@ -309,22 +337,13 @@ ImageTy init_image(filter::Config Cfg) {
   throw std::runtime_error("Need image");
 }
 
-template <typename FilterChildT>
-void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
+template <typename FilterChildT> void test_sequence(int argc, char **argv) {
   try {
     auto Cfg = filter::read_config(argc, argv);
     qout << "Welcome to image filtering!\n";
     dump_config_info(Cfg);
     auto Q = set_queue();
     print_info(qout, Q.get_device());
-    if (!Q.get_device().has(sycl::aspect::image))
-      throw std::runtime_error("Image support required");
-
-    IBundleTy SrcBundle = sycl::get_kernel_bundle<sycl::bundle_state::input>(
-        Q.get_context(), {kid});
-    // here we can do specialization constants and many more
-    OBundleTy ObjBundle = sycl::compile(SrcBundle);
-    EBundleTy ExeBundle = sycl::link(ObjBundle);
 
     auto Image = init_image(Cfg);
     const auto ImW = Image.width();
@@ -332,11 +351,12 @@ void test_sequence(int argc, char **argv, sycl::kernel_id kid) {
     qout << "Range: " << ImW << " x " << ImH << "\n";
     std::vector<sycl::float4> SrcBuffer(ImW * ImH);
     drawer::img_to_float4(Image, SrcBuffer.data());
-
     drawer::Filter Filt = init_filter(Cfg);
 
-    auto Tester = single_filter_sequence<FilterChildT>(
-        Q, Cfg, SrcBuffer.data(), ImW, ImH, Filt, ExeBundle);
+    filter::check_device_props(Q.get_device(), Cfg, Filt);
+
+    auto Tester = single_filter_sequence<FilterChildT>(Q, Cfg, SrcBuffer.data(),
+                                                       ImW, ImH, Filt);
 
     // display source and result pictures
     if (Cfg.Visualize) {

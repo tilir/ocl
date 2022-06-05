@@ -4,4 +4,4 @@ TGLLP, OneAPI
 (2) Histogram: we can see difference in stateful vs stateless memory
 (3) Filter: difference is really huge sampler-using filter works several times faster
             local memory almost equalizes things
-(4)
+(4) Great bug on convolution: host accessor filling filter data shall end its work

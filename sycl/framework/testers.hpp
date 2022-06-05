@@ -25,96 +25,10 @@
 
 #include "dice.hpp"
 #include "qstream.hpp"
-
-// access modes
-constexpr auto sycl_read = sycl::access::mode::read;
-constexpr auto sycl_write = sycl::access::mode::write;
-constexpr auto sycl_read_write = sycl::access::mode::read_write;
-constexpr auto sycl_atomic = sycl::access::mode::atomic;
-
-// targets for accessors
-constexpr auto sycl_global = sycl::access::target::device;
-constexpr auto sycl_local = sycl::access::target::local;
-constexpr auto sycl_constant = cl::sycl::access::target::constant_buffer;
-constexpr auto sycl_image = sycl::access::target::image;
-
-// fences
-constexpr auto sycl_local_fence = sycl::access::fence_space::local_space;
-constexpr auto sycl_global_fence = sycl::access::fence_space::global_space;
-
-// kernel bundle type aliases
-using IBundleTy = sycl::kernel_bundle<sycl::bundle_state::input>;
-using OBundleTy = sycl::kernel_bundle<sycl::bundle_state::object>;
-using EBundleTy = sycl::kernel_bundle<sycl::bundle_state::executable>;
-
-// buffer property aliases
-constexpr auto host_ptr = sycl::property::buffer::use_host_ptr{};
-
-// event and profiling aliases
-constexpr auto EvtStart = sycl::info::event_profiling::command_start;
-constexpr auto EvtEnd = sycl::info::event_profiling::command_end;
-constexpr auto EvtStatus = sycl::info::event::command_execution_status;
-constexpr auto EvtComplete = sycl::info::event_command_status::complete;
-
-// milliseconds, microsecond and nanoseconds
-static const double msec_per_sec = 1000.0;
-static const double usec_per_sec = msec_per_sec * msec_per_sec;
-static const double nsec_per_sec = msec_per_sec * msec_per_sec * msec_per_sec;
-
-#ifdef _WIN32
-// For some reasons, no sycl::atomic_ref in OneAPI Windows release
-// Yet it exists in SYCL 2020
-// So welcome another hack.
-namespace sycl {
-template <typename T, memory_order DefaultOrder, memory_scope DefaultScope,
-          access::address_space AddressSpace>
-using atomic_ref =
-    ext::oneapi::atomic_ref<T, DefaultOrder, DefaultScope, AddressSpace>;
-}
-#endif
-
-// global and local atomic references
-template <typename T>
-using global_atomic_ref =
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::system,
-                     sycl::access::address_space::global_space>;
-
-template <typename T>
-using local_atomic_ref =
-    sycl::atomic_ref<T, sycl::memory_order::relaxed,
-                     sycl::memory_scope::work_group,
-                     sycl::access::address_space::local_space>;
-
-// convenient namspaces
-namespace esimd = sycl::ext::intel::experimental::esimd;
-namespace chrono = std::chrono;
-namespace info = sycl::info;
+#include "syclconst.hpp"
+#include "timers.hpp"
 
 namespace sycltesters {
-
-class Timer {
-  chrono::high_resolution_clock::time_point Start, Fin;
-  bool Started = false;
-
-public:
-  Timer() = default;
-  void start() {
-    assert(!Started);
-    Started = true;
-    Start = chrono::high_resolution_clock::now();
-  }
-  void stop() {
-    assert(Started);
-    Started = false;
-    Fin = chrono::high_resolution_clock::now();
-  }
-  unsigned elapsed() {
-    assert(!Started);
-    auto Elps = Fin - Start;
-    auto Msec = chrono::duration_cast<chrono::milliseconds>(Elps);
-    return Msec.count();
-  }
-};
 
 template <typename OsTy> OsTy &print_info(OsTy &Os, sycl::device D) {
   auto Name = D.template get_info<info::device::name>();
@@ -128,42 +42,6 @@ template <typename OsTy> OsTy &print_info(OsTy &Os, sycl::device D) {
   Os << "Driver: " << DriverVersion << "\n";
   Os << "OpenCL: " << OCLVersion << "\n";
   return Os;
-}
-
-struct NamedEvent {
-  sycl::event Evt_;
-  std::string Name_;
-  NamedEvent(sycl::event Evt, std::string Name = "Unnamed")
-      : Evt_(Evt), Name_(std::move(Name)) {}
-};
-
-using EvtVec_t = std::vector<NamedEvent>;
-using EvtRet_t = std::optional<EvtVec_t>;
-
-inline unsigned long long getTime(EvtRet_t Opt, bool Quiet = true) {
-  unsigned long long AccTime = 0;
-  int EvtIdx = 0;
-  if (!Opt.has_value())
-    return AccTime;
-  auto &&Evts = Opt.value();
-  auto Old = qout.set(Quiet);
-  for (auto &&NEvt : Evts) {
-    sycl::event &Evt = NEvt.Evt_;
-    qout << EvtIdx++ << " (" << NEvt.Name_ << "): ";
-    sycl::info::event_command_status EStatus =
-        Evt.template get_info<EvtStatus>();
-    if (EStatus != EvtComplete) {
-      qout << " [...] ";
-      Evt.wait();
-    }
-    auto Start = Evt.template get_profiling_info<EvtStart>();
-    auto End = Evt.template get_profiling_info<EvtEnd>();
-    auto Elapsed = End - Start;
-    AccTime += Elapsed;
-    qout << Elapsed / nsec_per_sec << " : " << AccTime / nsec_per_sec << "\n";
-  }
-  qout.set(Old);
-  return AccTime;
 }
 
 inline sycl::queue set_queue() {

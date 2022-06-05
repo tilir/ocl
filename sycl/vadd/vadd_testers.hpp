@@ -108,7 +108,7 @@ template <typename T> class VectorAddTester {
   unsigned Rep_;
 
 public:
-  VectorAddTester(VectorAdd<T> &Vadder, unsigned Sz, unsigned Rep)
+  VectorAddTester(VectorAdd<T> &Vadder, int Sz, int Rep)
       : Vadder_(Vadder), Sz_(Sz), Rep_(Rep) {
     A_.resize(Sz_);
     B_.resize(Sz_);

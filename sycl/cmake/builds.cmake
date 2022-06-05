@@ -19,6 +19,10 @@ if (WIN32)
   target_compile_definitions(${KERNEL} PRIVATE _CRT_SECURE_NO_WARNINGS)
   target_compile_options(${KERNEL} PUBLIC "-Wno-format")
   target_compile_options(${KERNEL} PUBLIC "-Wno-ignored-attributes")
+else()
+  # on Linux build suppress noisy narrowing warnings
+  # TODO fix these...
+  target_compile_options(${KERNEL} PUBLIC "-Wno-c++11-narrowing")
 endif()
 if(RUNHOST)
   target_compile_definitions(${KERNEL} PRIVATE RUNHOST=1)

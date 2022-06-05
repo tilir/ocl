@@ -1,7 +1,9 @@
 //------------------------------------------------------------------------------
 //
 // Filtering with 2D convolution kernel (SYCL vs serial CPU)
-// Demonstrates local memory utilization
+// Demonstrates local memory utilization and specialization constants
+//
+// This example is not perfect: it hangs on execution
 //
 //------------------------------------------------------------------------------
 //
@@ -18,17 +20,21 @@
 
 #include "filtering_testers.hpp"
 
+// class is used for kernel name
+class filter_2d_local_spec;
+
+const static sycl::specialization_id<int> HalfWidthC;
+const static sycl::specialization_id<int> LMEMC;
+const static sycl::specialization_id<int> LSZC;
+
 using ConfigTy = sycltesters::filter::Config;
 
-// class is used for kernel name
-class filter_2d_local;
-
-class FilterLocalVec : public sycltesters::Filter {
+class FilterSamplerLocalSpec : public sycltesters::Filter {
   using sycltesters::Filter::Queue;
   ConfigTy Cfg_;
 
 public:
-  FilterLocalVec(cl::sycl::queue &DeviceQueue, ConfigTy Cfg)
+  FilterSamplerLocalSpec(cl::sycl::queue &DeviceQueue, ConfigTy Cfg)
       : sycltesters::Filter(DeviceQueue), Cfg_(Cfg) {
     if (Cfg.LocOverflow)
       throw std::runtime_error(
@@ -51,18 +57,13 @@ public:
     int DataSize = FiltSize * FiltSize;
     int HalfWidth = FiltSize / 2;
 
-    sycl::buffer<sycl::float4, 1> FiltBuffer(DataSize);
-
-    // hillarious bug: everything hangs if I forget those braces
-    {
-      auto FiltHostAcc = FiltBuffer.template get_access<sycl_write>();
-      const float *FiltData = Filt.data();
-      for (int I = 0; I < DataSize; ++I) {
-        float FiltChannel = FiltData[I];
-        FiltHostAcc[I] =
-            sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
-      }
-    } // because here FiltHostAcc shall unlock write access
+    std::vector<sycl::float4> FiltVectorized;
+    const float *FiltData = Filt.data();
+    for (int I = 0; I < DataSize; ++I) {
+      const float FData = FiltData[I];
+      FiltVectorized.emplace_back(FData, FData, FData, 1.0f);
+    }
+    sycl::buffer<sycl::float4, 1> FiltBuffer(FiltVectorized.data(), DataSize);
 
     // we need more local memory to handle +J and -J
     // say LSZ = 4 and filter is 3x3, then we need local memory 6x6 as shown
@@ -82,7 +83,17 @@ public:
     using ImWriteTy = sycl::accessor<sycl::float4, 2, sycl_write, sycl_image>;
     using LTy = sycl::accessor<sycl::float4, 2, sycl_read_write, sycl_local>;
 
+    sycl::kernel_id KId = sycl::get_kernel_id<filter_2d_local_spec>();
+    sycl::kernel_bundle KbSrc =
+        sycl::get_kernel_bundle<sycl::bundle_state::input>(
+            DeviceQueue.get_context(), {KId});
+    KbSrc.template set_specialization_constant<HalfWidthC>(HalfWidth);
+    KbSrc.template set_specialization_constant<LMEMC>(LMEM);
+    KbSrc.template set_specialization_constant<LSZC>(LSZ);
+    sycl::kernel_bundle Kb = sycl::build(KbSrc);
+
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
+      Cgh.use_kernel_bundle(Kb);
       LTy Cache{LocalMemorySize, Cgh};
       ImAccTy InPtr(Src, Cgh);    // image to read from
       ImWriteTy OutPtr(Dst, Cgh); // image to write to
@@ -93,21 +104,29 @@ public:
                             sycl::addressing_mode::clamp,
                             sycl::filtering_mode::nearest);
 
-      auto KernFilter = [=](sycl::nd_item<2> WorkItem) {
+      auto KernFilter = [=](sycl::nd_item<2> WorkItem,
+                            sycl::kernel_handler Kh) {
         const int GX = WorkItem.get_global_id(0);
         const int GY = WorkItem.get_global_id(1);
         const int LX = WorkItem.get_local_id(0);
         const int LY = WorkItem.get_local_id(1);
 
-        // workgroup start in global
-        const int WX = WorkItem.get_group(0) * LSZ;
-        const int WY = WorkItem.get_group(1) * LSZ;
+        const int HalfWidthK =
+            Kh.template get_specialization_constant<HalfWidthC>();
+        const int LMEMK = Kh.template get_specialization_constant<LMEMC>();
+        const int LSZK = Kh.template get_specialization_constant<LSZC>();
 
-        // caching current pixels
-        for (int I = LY; I < LMEM; I += LSZ) {
-          const int Row = WY + I - HalfWidth;
-          for (int J = LX; J < LMEM; J += LSZ) {
-            const int Col = WX + J - HalfWidth;
+        // workgroup start in global
+        const int WX = WorkItem.get_group(0) * LSZK;
+        const int WY = WorkItem.get_group(1) * LSZK;
+
+// caching current pixels
+#pragma unroll
+        for (int I = LY; I < LMEMK; I += LSZK) {
+          const int Row = WY + I - HalfWidthK;
+#pragma unroll
+          for (int J = LX; J < LMEMK; J += LSZK) {
+            const int Col = WX + J - HalfWidthK;
             sycl::int2 Coords = {Col, Row};
             Cache[J][I] = InPtr.read(Coords, Sampler);
           }
@@ -118,9 +137,12 @@ public:
         sycl::float4 Sum = {0.0f, 0.0f, 0.0f, 1.0f};
         int FiltIndex = 0;
 
-        for (int I = -HalfWidth; I <= HalfWidth; ++I) {
-          for (int J = -HalfWidth; J <= HalfWidth; ++J) {
-            sycl::float4 Pixel = Cache[LX + HalfWidth + J][LY + HalfWidth + I];
+#pragma unroll
+        for (int I = -HalfWidthK; I <= HalfWidthK; ++I) {
+#pragma unroll
+          for (int J = -HalfWidthK; J <= HalfWidthK; ++J) {
+            sycl::float4 Pixel =
+                Cache[LX + HalfWidthK + J][LY + HalfWidthK + I];
             Sum += Pixel * FiltPtr[FiltIndex]; // vectorized
             FiltIndex += 1;
           }
@@ -129,7 +151,7 @@ public:
         OutPtr.write(Coords, Sum);
       };
 
-      Cgh.parallel_for<class filter_2d_local>(DataSz, KernFilter);
+      Cgh.parallel_for<class filter_2d_local_spec>(DataSz, KernFilter);
     });
     ProfInfo.emplace_back(Evt, "Convolution");
     DeviceQueue.wait();
@@ -138,5 +160,5 @@ public:
 };
 
 int main(int argc, char **argv) {
-  sycltesters::test_sequence<FilterLocalVec>(argc, argv);
+  sycltesters::test_sequence<FilterSamplerLocalSpec>(argc, argv);
 }

@@ -88,6 +88,7 @@ using local_atomic_ref =
 // convenient namspaces
 namespace esimd = sycl::ext::intel::experimental::esimd;
 namespace chrono = std::chrono;
+namespace info = sycl::info;
 
 namespace sycltesters {
 
@@ -116,10 +117,16 @@ public:
 };
 
 template <typename OsTy> OsTy &print_info(OsTy &Os, sycl::device D) {
-  Os << D.template get_info<sycl::info::device::name>() << "\n";
-  Os << "Driver version: "
-     << D.template get_info<sycl::info::device::driver_version>() << "\n";
-  Os << D.template get_info<sycl::info::device::opencl_c_version>() << "\n";
+  auto Name = D.template get_info<info::device::name>();
+  auto Version = D.template get_info<info::device::version>();
+  auto Vendor = D.template get_info<info::device::vendor>();
+  auto DriverVersion = D.template get_info<info::device::driver_version>();
+  auto OCLVersion = D.template get_info<info::device::opencl_c_version>();
+  Os << "Name: " << Name << "\n";
+  Os << "Version: " << Version << "\n";
+  Os << "Vendor: " << Vendor << "\n";
+  Os << "Driver: " << DriverVersion << "\n";
+  Os << "OpenCL: " << OCLVersion << "\n";
   return Os;
 }
 

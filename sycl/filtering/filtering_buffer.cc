@@ -44,26 +44,16 @@ public:
     int DataSize = FiltSize * FiltSize;
     int HalfWidth = FiltSize / 2;
 
-#if !defined(FILTBUF)
-    sycl::float4 *FiltPtr = malloc_shared<sycl::float4>(DataSize, DeviceQueue);
-    const float *FiltData = Filt.data();
-    for (int I = 0; I < DataSize; ++I) {
-      float FiltChannel = FiltData[I];
-      FiltPtr[I] = sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
-    }
-#endif
-
-// strange bug: everything hangs if filter is read as a buffer
-#if defined(FILTBUF)
     sycl::buffer<sycl::float4, 1> FiltBuffer(DataSize);
-    auto FiltHostAcc = FiltBuffer.template get_access<sycl_write>();
-    const float *FiltData = Filt.data();
-    for (int I = 0; I < DataSize; ++I) {
-      float FiltChannel = FiltData[I];
-      FiltHostAcc[I] =
-          sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
+    {
+      auto FiltHostAcc = FiltBuffer.template get_access<sycl_write>();
+      const float *FiltData = Filt.data();
+      for (int I = 0; I < DataSize; ++I) {
+        float FiltChannel = FiltData[I];
+        FiltHostAcc[I] =
+            sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
+      }
     }
-#endif
 
     // explicit accessor types
     using ImReadTy = sycl::accessor<sycl::float4, 1, sycl_read, sycl_constant>;
@@ -72,9 +62,7 @@ public:
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       ImReadTy InPtr(Src, Cgh);
       ImWriteTy OutPtr(Dst, Cgh);
-#if defined(FILTBUF)
-      auto FiltPtr = FiltBuffer.template get_access<sycl_read>();
-#endif
+      auto FiltPtr = FiltBuffer.template get_access<sycl_read>(Cgh);
 
       auto KernFilter = [=](sycl::id<2> Id) {
         const size_t Column = Id.get(0);
@@ -102,9 +90,6 @@ public:
 
     DeviceQueue.wait(); // or explicit host accessor to Dst
     ProfInfo.push_back(Evt);
-#if !defined(FILTBUF)
-    sycl::free(FiltPtr, DeviceQueue);
-#endif
     return ProfInfo;
   }
 };

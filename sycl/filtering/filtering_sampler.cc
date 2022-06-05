@@ -43,26 +43,16 @@ public:
     int DataSize = FiltSize * FiltSize;
     int HalfWidth = FiltSize / 2;
 
-#if !defined(FILTBUF)
-    sycl::float4 *FiltPtr = malloc_shared<sycl::float4>(DataSize, DeviceQueue);
-    const float *FiltData = Filt.data();
-    for (int I = 0; I < DataSize; ++I) {
-      float FiltChannel = FiltData[I];
-      FiltPtr[I] = sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
-    }
-#endif
-
-// strange bug: everything hangs if filter is read as a buffer
-#if defined(FILTBUF)
     sycl::buffer<sycl::float4, 1> FiltBuffer(DataSize);
-    auto FiltHostAcc = FiltBuffer.template get_access<sycl_write>();
-    const float *FiltData = Filt.data();
-    for (int I = 0; I < DataSize; ++I) {
-      float FiltChannel = FiltData[I];
-      FiltHostAcc[I] =
-          sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
+    {
+      auto FiltHostAcc = FiltBuffer.template get_access<sycl_write>();
+      const float *FiltData = Filt.data();
+      for (int I = 0; I < DataSize; ++I) {
+        float FiltChannel = FiltData[I];
+        FiltHostAcc[I] =
+            sycl::float4{FiltChannel, FiltChannel, FiltChannel, 1.0f};
+      }
     }
-#endif
 
     using ImAccTy = sycl::accessor<sycl::float4, 2, sycl_read, sycl_image>;
     using ImWriteTy = sycl::accessor<sycl::float4, 2, sycl_write, sycl_image>;
@@ -70,9 +60,7 @@ public:
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       ImAccTy InPtr(Src, Cgh);
       ImWriteTy OutPtr(Dst, Cgh);
-#if defined(FILTBUF)
-      auto FiltPtr = FiltBuffer.template get_access<sycl_read>();
-#endif
+      auto FiltPtr = FiltBuffer.template get_access<sycl_read>(Cgh);
 
       sycl::sampler Sampler(sycl::coordinate_normalization_mode::unnormalized,
                             sycl::addressing_mode::clamp,
@@ -103,9 +91,6 @@ public:
 
     ProfInfo.push_back(Evt);
     DeviceQueue.wait(); // or need host acessor to image here
-#if !defined(FILTBUF)
-    sycl::free(FiltPtr, DeviceQueue);
-#endif
     return ProfInfo;
   }
 };

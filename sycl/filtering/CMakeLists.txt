@@ -5,6 +5,7 @@ set(KERNELS
   filtering_buffer
   filtering_sampler_local
   filtering_buffer_local
+  filtering_sampler_local_spec
 )
 
 # build kernels
@@ -19,6 +20,7 @@ set(TESTING
   filtering_buffer
   filtering_sampler_local
   filtering_buffer_local
+  filtering_sampler_local_spec
 )
 
 foreach(KERNEL ${TESTING})

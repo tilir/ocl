@@ -42,7 +42,13 @@ public:
     auto &DeviceQueue = Queue();
 
     const int LSZ = Cfg_.LocSz;
+    const int ImWR = simplemath::roundup(ImW, LSZ);
+    const int ImHR = simplemath::roundup(ImH, LSZ);
+
     sycl::range<2> LDims(LSZ, LSZ);
+    sycl::range<2> GDims(ImWR, ImHR);
+    sycl::nd_range<2> IterSpace{GDims, LDims};
+
     sycl::range<2> Dims(ImW, ImH);
     sycl::image<2> Dst(DstData, sycl_rgba, sycl_fp32, Dims);
     sycl::image<2> Src(SrcData, sycl_rgba, sycl_fp32, Dims);
@@ -76,7 +82,6 @@ public:
     // ........
     // ........
     const int LMEM = LSZ + HalfWidth * 2;
-    sycl::nd_range<2> DataSz{Dims, LDims};
     sycl::range<2> LocalMemorySize{LMEM, LMEM};
     using ImAccTy = sycl::accessor<sycl::float4, 2, sycl_read, sycl_image>;
     using ImWriteTy = sycl::accessor<sycl::float4, 2, sycl_write, sycl_image>;
@@ -114,6 +119,10 @@ public:
         }
         WorkItem.barrier(sycl_local_fence);
 
+        // we are out of image bounds
+        if (GX >= ImW || GY >= ImH)
+          return;
+
         // calculate convolution with cache
         sycl::float4 Sum = {0.0f, 0.0f, 0.0f, 1.0f};
         int FiltIndex = 0;
@@ -129,7 +138,7 @@ public:
         OutPtr.write(Coords, Sum);
       };
 
-      Cgh.parallel_for<class filter_2d_local>(DataSz, KernFilter);
+      Cgh.parallel_for<class filter_2d_local>(IterSpace, KernFilter);
     });
     ProfInfo.emplace_back(Evt, "Convolution");
     DeviceQueue.wait();

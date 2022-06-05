@@ -25,6 +25,7 @@
 
 #include "dice.hpp"
 #include "qstream.hpp"
+#include "simplemath.hpp"
 #include "syclconst.hpp"
 #include "timers.hpp"
 

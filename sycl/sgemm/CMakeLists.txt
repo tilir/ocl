@@ -8,8 +8,6 @@ set(KERNELS
   matmult_local_shared_spec
   matmult_groups
   matmult_groups_priv
-# excluded from testing
-  matmult_local_maxlsz
 )
 
 # common includes and libs

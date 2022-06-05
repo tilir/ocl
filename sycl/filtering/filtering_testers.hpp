@@ -170,6 +170,45 @@ inline void check_device_props(sycl::device D, Config &Cfg,
   }
 }
 
+inline drawer::Filter init_filter(filter::Config Cfg) {
+  if (!Cfg.FilterPath.empty()) {
+    qout << "Reading filter: " << Cfg.FilterPath << "\n";
+    drawer::Filter Filt(Cfg.FilterPath);
+    qout << "N = " << Filt.sqrt_size() << "\n";
+    return Filt;
+  }
+
+  if (Cfg.RandFilter) {
+    qout << "Generating filter\n";
+    drawer::Filter Filt(Cfg.RandFiltSz, filter::MINVAL, filter::MAXVAL);
+    qout << "N = " << Filt.sqrt_size() << "\n";
+#ifdef SHOWFILT
+    auto DataSz = Cfg.RandFiltSz * Cfg.RandFiltSz;
+    sycltesters::visualize_seq(Filt.data(), Filt.data() + DataSz, std::cout);
+#endif
+    return Filt;
+  }
+
+  throw std::runtime_error("Need filter");
+}
+
+inline ImageTy init_image(filter::Config Cfg) {
+  if (!Cfg.ImagePath.empty()) {
+    qout << "Initializing with image: " << Cfg.ImagePath << "\n";
+    ImageTy Image(Cfg.ImagePath.c_str());
+    return Image;
+  }
+
+  if (Cfg.RandImage) {
+    qout << "Generating Image with random boxes\n";
+    ImageTy Image(Cfg.RandImSz, Cfg.RandImSz, 1, 3, 255);
+    drawer::random_boxes(filter::NBOXES, Image);
+    return Image;
+  }
+
+  throw std::runtime_error("Need image");
+}
+
 } // namespace filter
 
 class Filter {
@@ -296,47 +335,6 @@ FilterTester single_filter_sequence(sycl::queue &Q, filter::Config Cfg,
   return Tester;
 }
 
-inline drawer::Filter init_filter(filter::Config Cfg) {
-  if (!Cfg.FilterPath.empty()) {
-    qout << "Reading filter: " << Cfg.FilterPath << "\n";
-    drawer::Filter Filt(Cfg.FilterPath);
-    qout << "N = " << Filt.sqrt_size() << "\n";
-    return Filt;
-  }
-
-  if (Cfg.RandFilter) {
-    qout << "Generating filter\n";
-    drawer::Filter Filt(Cfg.RandFiltSz, filter::MINVAL, filter::MAXVAL);
-    qout << "N = " << Filt.sqrt_size() << "\n";
-#ifdef SHOWFILT
-    auto DataSz = Cfg.RandFiltSz * Cfg.RandFiltSz;
-    sycltesters::visualize_seq(Filt.data(), Filt.data() + DataSz, std::cout);
-#endif
-    return Filt;
-  }
-
-  throw std::runtime_error("Need filter");
-}
-
-using ImageTy = cimg_library::CImg<unsigned char>;
-
-inline ImageTy init_image(filter::Config Cfg) {
-  if (!Cfg.ImagePath.empty()) {
-    qout << "Initializing with image: " << Cfg.ImagePath << "\n";
-    ImageTy Image(Cfg.ImagePath.c_str());
-    return Image;
-  }
-
-  if (Cfg.RandImage) {
-    qout << "Generating Image with random boxes\n";
-    ImageTy Image(Cfg.RandImSz, Cfg.RandImSz, 1, 3, 255);
-    drawer::random_boxes(filter::NBOXES, Image);
-    return Image;
-  }
-
-  throw std::runtime_error("Need image");
-}
-
 template <typename FilterChildT> void test_sequence(int argc, char **argv) {
   try {
     auto Cfg = filter::read_config(argc, argv);
@@ -345,13 +343,13 @@ template <typename FilterChildT> void test_sequence(int argc, char **argv) {
     auto Q = set_queue();
     print_info(qout, Q.get_device());
 
-    auto Image = init_image(Cfg);
+    auto Image = filter::init_image(Cfg);
     const auto ImW = Image.width();
     const auto ImH = Image.height();
     qout << "Range: " << ImW << " x " << ImH << "\n";
     std::vector<sycl::float4> SrcBuffer(ImW * ImH);
     drawer::img_to_float4(Image, SrcBuffer.data());
-    drawer::Filter Filt = init_filter(Cfg);
+    drawer::Filter Filt = filter::init_filter(Cfg);
 
     filter::check_device_props(Q.get_device(), Cfg, Filt);
 

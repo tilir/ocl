@@ -26,6 +26,8 @@ class filter_2d_local_spec;
 const static sycl::specialization_id<int> HalfWidthC;
 const static sycl::specialization_id<int> LMEMC;
 const static sycl::specialization_id<int> LSZC;
+const static sycl::specialization_id<int> ImWC;
+const static sycl::specialization_id<int> ImHC;
 
 using ConfigTy = sycltesters::filter::Config;
 
@@ -48,7 +50,13 @@ public:
     auto &DeviceQueue = Queue();
 
     const int LSZ = Cfg_.LocSz;
+    const int ImWR = simplemath::roundup(ImW, LSZ);
+    const int ImHR = simplemath::roundup(ImH, LSZ);
+
     sycl::range<2> LDims(LSZ, LSZ);
+    sycl::range<2> GDims(ImWR, ImHR);
+    sycl::nd_range<2> IterSpace{GDims, LDims};
+
     sycl::range<2> Dims(ImW, ImH);
     sycl::image<2> Dst(DstData, sycl_rgba, sycl_fp32, Dims);
     sycl::image<2> Src(SrcData, sycl_rgba, sycl_fp32, Dims);
@@ -77,7 +85,6 @@ public:
     // ........
     // ........
     const int LMEM = LSZ + HalfWidth * 2;
-    sycl::nd_range<2> DataSz{Dims, LDims};
     sycl::range<2> LocalMemorySize{LMEM, LMEM};
     using ImAccTy = sycl::accessor<sycl::float4, 2, sycl_read, sycl_image>;
     using ImWriteTy = sycl::accessor<sycl::float4, 2, sycl_write, sycl_image>;
@@ -90,6 +97,8 @@ public:
     KbSrc.template set_specialization_constant<HalfWidthC>(HalfWidth);
     KbSrc.template set_specialization_constant<LMEMC>(LMEM);
     KbSrc.template set_specialization_constant<LSZC>(LSZ);
+    KbSrc.template set_specialization_constant<ImWC>(ImW);
+    KbSrc.template set_specialization_constant<ImHC>(ImH);
     sycl::kernel_bundle Kb = sycl::build(KbSrc);
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
@@ -115,10 +124,18 @@ public:
             Kh.template get_specialization_constant<HalfWidthC>();
         const int LMEMK = Kh.template get_specialization_constant<LMEMC>();
         const int LSZK = Kh.template get_specialization_constant<LSZC>();
+        const int ImWK = Kh.template get_specialization_constant<ImWC>();
+        const int ImHK = Kh.template get_specialization_constant<ImHC>();
 
         // workgroup start in global
         const int WX = WorkItem.get_group(0) * LSZK;
         const int WY = WorkItem.get_group(1) * LSZK;
+
+#if 0
+        // when doing this check here, everything hangs
+        if (GX >= ImWK || GY >= ImHK)
+          return;
+#endif
 
 // caching current pixels
 #pragma unroll
@@ -132,6 +149,10 @@ public:
           }
         }
         WorkItem.barrier(sycl_local_fence);
+
+        // we are out of image bounds
+        if (GX >= ImWK || GY >= ImHK)
+          return;
 
         // calculate convolution with cache
         sycl::float4 Sum = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -148,10 +169,11 @@ public:
           }
         }
         sycl::int2 Coords = {GX, GY};
-        OutPtr.write(Coords, Sum);
+        if (GX < ImWK && GY < ImHK)
+          OutPtr.write(Coords, Sum);
       };
 
-      Cgh.parallel_for<class filter_2d_local_spec>(DataSz, KernFilter);
+      Cgh.parallel_for<class filter_2d_local_spec>(IterSpace, KernFilter);
     });
     ProfInfo.emplace_back(Evt, "Convolution");
     DeviceQueue.wait();

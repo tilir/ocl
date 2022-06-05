@@ -38,28 +38,9 @@ struct Dice {
   }
 };
 
-template <typename T>
-void SwapElements(T *Vec, int NSeq, int SeqLen, int Power2) {
-  for (int SNum = 0; SNum < NSeq; SNum++) {
-    int Odd = SNum / Power2;
-    bool Increasing = ((Odd % 2) == 0);
-    int HalfLen = SeqLen / 2;
-
-    // For all elements in a bitonic sequence, swap them if needed
-    for (int I = SNum * SeqLen; I < SNum * SeqLen + HalfLen; I++) {
-      int J = I + HalfLen;
-      std::cout << "(" << I << ", " << J << ") ";
-      if (((Vec[I] > Vec[J]) && Increasing) ||
-          ((Vec[I] < Vec[J]) && !Increasing))
-        std::swap(Vec[I], Vec[J]);
-    }
-  }
-  std::cout << std::endl;
-}
-
 template <typename T> void bitonic_sort(T *Vec, size_t Sz) {
   assert(Vec);
-  int NSeq, SeqLen, Step, Stage, Power2;
+  int Step, Stage;
 
   if (std::popcount(Sz) != 1 || Sz < 2)
     throw std::runtime_error("Please use only power-of-two arrays");
@@ -70,10 +51,24 @@ template <typename T> void bitonic_sort(T *Vec, size_t Sz) {
     std::cout << "Step " << Step << ": " << std::endl;
     for (Stage = Step; Stage >= 0; Stage--) {
       std::cout << "Stage: " << Stage << ": " << std::endl;
-      NSeq = 1 << (N - Stage - 1);
-      SeqLen = 1 << (Stage + 1);
-      Power2 = 1 << (Step - Stage);
-      SwapElements(Vec, NSeq, SeqLen, Power2);
+      int NSeq = 1 << (N - Stage - 1);
+      for (int SNum = 0; SNum < NSeq; SNum++) {
+        int Power2 = 1 << (Step - Stage);
+        int Odd = SNum / Power2;
+        bool Increasing = ((Odd % 2) == 0);
+        int SeqLen = 1 << (Stage + 1);
+        int HalfLen = SeqLen / 2;
+
+        // For all elements in a bitonic sequence, swap them if needed
+        for (int I = SNum * SeqLen; I < SNum * SeqLen + HalfLen; I++) {
+          int J = I + HalfLen;
+          std::cout << "(" << I << ", " << J << ") ";
+          if (((Vec[I] > Vec[J]) && Increasing) ||
+              ((Vec[I] < Vec[J]) && !Increasing))
+            std::swap(Vec[I], Vec[J]);
+        }
+      }
+      std::cout << std::endl;
     }
     std::cout << "After step " << Step << ": " << std::endl;
     visualize_seq(Vec, Vec + Sz, std::cout);

@@ -21,14 +21,16 @@
 // class is used for kernel name
 template <typename T> class bitonic_sort_buf;
 
+using ConfigTy = sycltesters::bitonicsort::Config;
+
 template <typename T>
 class BitonicSortBuf : public sycltesters::BitonicSort<T> {
   using sycltesters::BitonicSort<T>::Queue;
-  unsigned Lsz_;
+  ConfigTy Cfg_;
 
 public:
-  BitonicSortBuf(sycl::queue &DeviceQueue, unsigned Lsz)
-      : sycltesters::BitonicSort<T>(DeviceQueue), Lsz_(Lsz) {}
+  BitonicSortBuf(sycl::queue &DeviceQueue, ConfigTy Cfg)
+      : sycltesters::BitonicSort<T>(DeviceQueue), Cfg_(Cfg) {}
 
   sycltesters::EvtRet_t operator()(T *Vec, size_t Sz) override {
     assert(Vec);

@@ -35,14 +35,14 @@
 
 #include "testers.hpp"
 
-constexpr int DEF_SIZE = 10;
-constexpr int DEF_BLOCK_SIZE = 1;
+constexpr int DEF_SIZE = 20;
+constexpr int DEF_BLOCK_SIZE = 256;
 
 namespace sycltesters {
 
 namespace bitonicsort {
 struct Config {
-  unsigned Size, LocalSize;
+  unsigned Size, LocSz;
   bool Vis = false, Quiet = false, Detailed = false;
 };
 
@@ -58,7 +58,7 @@ inline Config read_config(int argc, char **argv) {
   OptParser.parse(argc, argv);
 
   Cfg.Size = OptParser.template get<int>("size");
-  Cfg.LocalSize = OptParser.template get<int>("lsz");
+  Cfg.LocSz = OptParser.template get<int>("lsz");
   Cfg.Vis = OptParser.exists("vis");
   Cfg.Detailed = OptParser.exists("detailed");
 
@@ -135,7 +135,7 @@ template <typename T> class BitonicSortTester {
   BitonicSort<T> &Sorter_;
   Timer Timer_;
   bitonicsort::Config Cfg_;
-  int Sz_;
+  unsigned Sz_;
   std::vector<T> A_;
 
 public:
@@ -167,22 +167,19 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
   try {
     auto Cfg = bitonicsort::read_config(argc, argv);
     auto Q = set_queue();
-    qout << "Welcome to bitonic sort"
-         << "\n";
+    qout << "Welcome to bitonic sort\n";
     qout << "Using vector size = " << (1 << Cfg.Size) << "\n";
     print_info(qout, Q.get_device());
 
     using Ty = typename BitonicChildT::type;
-    BitonicChildT BitonicSort{Q, Cfg.LocalSize};
+    BitonicChildT BitonicSort{Q, Cfg};
     BitonicSortTester<Ty> Tester{BitonicSort, Cfg};
 
-    qout << "Initializing"
-         << "\n";
+    qout << "Initializing\n";
     Tester.initialize();
 
     if (Cfg.Vis) {
-      qout << "Before sort:"
-           << "\n";
+      qout << "Before sort:\n";
       visualize_seq(Tester.begin(), Tester.end(), qout);
     }
 
@@ -193,26 +190,22 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
     auto ElapsedH = TesterH.calculate();
     qout << "Measured host time: " << ElapsedH.first << "\n";
     if (Cfg.Vis) {
-      qout << "After sort (host):"
-           << "\n";
+      qout << "After sort (host):\n";
       visualize_seq(TesterH.begin(), TesterH.end(), qout);
     }
 #endif
 
-    qout << "Calculating"
-         << "\n";
+    qout << "Calculating\n";
     auto Elapsed = Tester.calculate();
 
     if (Cfg.Vis) {
-      qout << "After sort:"
-           << "\n";
+      qout << "After sort:\n";
       visualize_seq(Tester.begin(), Tester.end(), qout);
     }
 
 #ifdef VERIFY
     if (!std::is_sorted(Tester.begin(), Tester.end())) {
-      std::cerr << "Sorting failed"
-                << "\n";
+      std::cerr << "Sorting failed\n";
       std::terminate();
     }
 // we may also check with host results
@@ -248,8 +241,7 @@ template <typename BitonicChildT> void test_sequence(int argc, char **argv) {
     std::cerr << "Unknown error\n";
     std::terminate();
   }
-  qout << "Everything is correct"
-       << "\n";
+  qout << "Everything is correct\n";
 }
 
 } // namespace sycltesters

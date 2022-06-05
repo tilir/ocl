@@ -22,8 +22,8 @@ ARGV << '-h' if ARGV.empty?
 
 options = OpenStruct.new
 options.verbose = false
-options.progname = "bitonic\\bitonicsort.exe"
-options.outfile = "bitonicsort.dat"
+options.progname = "bitonic\\bitonic_buffer.exe"
+options.outfile = "bitonic_buffer.dat"
 options.lsz = 256
 options.sz0 = 18
 options.szn = 26

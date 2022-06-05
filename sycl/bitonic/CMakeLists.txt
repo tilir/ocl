@@ -1,6 +1,6 @@
 set(KERNELS
-  bitonicsort
-  bitonic_shared
+  bitonic_buffer
+  bitonic_device
 )
 
 # build kernels
@@ -9,8 +9,8 @@ foreach(KERNEL ${KERNELS})
 endforeach()
 
 set(TESTING
-  bitonicsort
-  bitonic_shared
+  bitonic_buffer
+  bitonic_device
 )
 
 foreach(KERNEL ${TESTING})

@@ -38,8 +38,8 @@ struct Dice {
   }
 };
 
-template <typename T> void bitonic_sort(T *Vec, size_t Sz) {
-  assert(Vec);
+template <typename T> void bitonic_sort(T *A, size_t Sz) {
+  assert(A);
   int Step, Stage;
 
   if (std::popcount(Sz) != 1 || Sz < 2)
@@ -50,28 +50,32 @@ template <typename T> void bitonic_sort(T *Vec, size_t Sz) {
   for (Step = 0; Step < N; Step++) {
     std::cout << "Step " << Step << ": " << std::endl;
     for (Stage = Step; Stage >= 0; Stage--) {
-      std::cout << "Stage: " << Stage << ": " << std::endl;
-      int NSeq = 1 << (N - Stage - 1);
-      for (int SNum = 0; SNum < NSeq; SNum++) {
-        int Power2 = 1 << (Step - Stage);
-        int Odd = SNum / Power2;
-        bool Increasing = ((Odd % 2) == 0);
-        int SeqLen = 1 << (Stage + 1);
-        int HalfLen = SeqLen / 2;
+      const int SeqLen = 1 << (Stage + 1);
+      const int Power2 = 1 << (Step - Stage);
+      std::cout << "Stage: " << Stage << " : " << SeqLen << " : " << Power2
+                << std::endl;
 
-        // For all elements in a bitonic sequence, swap them if needed
-        for (int I = SNum * SeqLen; I < SNum * SeqLen + HalfLen; I++) {
-          int J = I + HalfLen;
-          std::cout << "(" << I << ", " << J << ") ";
-          if (((Vec[I] > Vec[J]) && Increasing) ||
-              ((Vec[I] < Vec[J]) && !Increasing))
-            std::swap(Vec[I], Vec[J]);
+      for (int I = 0; I < Sz; ++I) {
+        const int SeqNum = I / SeqLen;
+        const int Odd = SeqNum / Power2;
+        const bool Increasing = ((Odd % 2) == 0);
+        const int HalfLen = SeqLen / 2;
+
+        if (I < (SeqLen * SeqNum) + HalfLen) {
+          const int J = I + HalfLen;
+          std::cout << "(" << I << ", " << J
+                    << ") : " << (SeqLen * SeqNum) + HalfLen << " ";
+          if (((A[I] > A[J]) && Increasing) || ((A[I] < A[J]) && !Increasing)) {
+            T Temp = A[I];
+            A[I] = A[J];
+            A[J] = Temp;
+          }
         }
       }
       std::cout << std::endl;
     }
     std::cout << "After step " << Step << ": " << std::endl;
-    visualize_seq(Vec, Vec + Sz, std::cout);
+    visualize_seq(A, A + Sz, std::cout);
   }
 }
 
@@ -79,9 +83,13 @@ template <typename T> void bitonic_sort(T *Vec, size_t Sz) {
 constexpr int SZ = 32;
 
 int main() {
-  std::vector<int> v(SZ);
-  Dice d{0, SZ};
-  std::generate(v.begin(), v.end(), [&] { return d(); });
+  std::vector<int> v = {20, 22, 2,  19, 1,  16, 9, 0,  12, 24, 18,
+                        8,  16, 4,  24, 29, 4,  5, 24, 0,  15, 20,
+                        16, 9,  15, 2,  17, 32, 8, 11, 28, 19};
+
+  // std::vector<int> v(SZ);
+  // Dice d{0, SZ};
+  // std::generate(v.begin(), v.end(), [&] { return d(); });
   std::cout << "Initial: " << std::endl;
   visualize_seq(v.begin(), v.end(), std::cout);
   bitonic_sort(v.data(), v.size());

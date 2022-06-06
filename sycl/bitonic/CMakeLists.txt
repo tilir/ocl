@@ -1,6 +1,7 @@
 set(KERNELS
   bitonic_buffer
   bitonic_device
+  bitonic_device_local
 )
 
 # build kernels
@@ -11,6 +12,7 @@ endforeach()
 set(TESTING
   bitonic_buffer
   bitonic_device
+  bitonic_device_local
 )
 
 foreach(KERNEL ${TESTING})

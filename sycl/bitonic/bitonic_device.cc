@@ -74,6 +74,13 @@ public:
         ProfInfo.emplace_back(Evt, "Next iteration");
         Evt.wait(); // no implicit task graph
       }
+      // visualization after step
+      if (Cfg_.Verbose) {
+        sycltesters::qout << "After step: " << Step << std::endl;
+        DeviceQueue.copy(A, Vec, Sz);
+        DeviceQueue.wait();
+        visualize_seq(Vec, Vec + Sz, sycltesters::qout);
+      }
     }
     auto EvtCpyBack = DeviceQueue.copy(A, Vec, Sz);
     ProfInfo.emplace_back(EvtCpyBack, "Copy back");

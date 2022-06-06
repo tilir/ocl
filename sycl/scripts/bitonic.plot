@@ -5,6 +5,7 @@
 # collect data with bitonic.rb
 # ..\scripts\bitonic.rb -p bitonic\bitonic_buffer.exe -o bitonic_buffer.dat
 # ..\scripts\bitonic.rb -p bitonic\bitonic_device.exe -o bitonic_device.dat
+# ..\scripts\bitonic.rb -p bitonic\bitonic_device_local.exe -o bitonic_device_local.dat
 #
 # run plotter with
 # > gnuplot -persist -c ..\scripts\bitonic.plot
@@ -24,6 +25,5 @@ set ylabel "time (seconds)"
 
 set output "bitonic_baseline.png"
 plot 'bitonic_buffer.dat' with linespoints t 'Accessor',\
-     'bitonic_device.dat' with linespoints t 'Device memory',
-     
-     
+     'bitonic_device.dat' with linespoints t 'Device memory',\
+     'bitonic_device_local.dat' with linespoints t 'Local memory'   

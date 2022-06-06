@@ -22,6 +22,7 @@
 #include <chrono>
 #include <iostream>
 #include <iterator>
+#include <numeric>
 #include <vector>
 
 #include <CL/sycl.hpp>
@@ -42,8 +43,10 @@ namespace sycltesters {
 
 namespace bitonicsort {
 struct Config {
+  std::string FileName;
   unsigned Size, LocSz;
-  bool Vis = false, Quiet = false, Detailed = false;
+  bool Vis = false, Quiet = false, Detailed = false, Definit = false,
+       Verbose = false, InpFile = false;
 };
 
 inline Config read_config(int argc, char **argv) {
@@ -55,12 +58,21 @@ inline Config read_config(int argc, char **argv) {
   OptParser.template add<int>("vis", 0, "visualize before and after sort");
   OptParser.template add<int>("detailed", 0, "detailed events");
   OptParser.template add<int>("quiet", 0, "quiet mode for bulk runs");
+  OptParser.template add<int>("definit", 0, "initialize for worst case");
+  OptParser.template add<std::string>("inpfile", "",
+                                      "initialize from given file");
+  OptParser.template add<int>("verbose", 0,
+                              "really verbose mode: after each step");
   OptParser.parse(argc, argv);
 
   Cfg.Size = OptParser.template get<int>("size");
   Cfg.LocSz = OptParser.template get<int>("lsz");
   Cfg.Vis = OptParser.exists("vis");
   Cfg.Detailed = OptParser.exists("detailed");
+  Cfg.Definit = OptParser.exists("definit");
+  Cfg.Verbose = OptParser.exists("verbose");
+  Cfg.InpFile = OptParser.exists("inpfile");
+  Cfg.FileName = OptParser.template get<std::string>("inpfile");
 
   if (Cfg.Size < 2 || Cfg.Size > 31)
     throw std::runtime_error("Size is logarithmic, 2 is min, 31 is max");
@@ -143,6 +155,22 @@ public:
       : Sorter_(Sorter), Cfg_(Cfg), Sz_(1u << Cfg_.Size), A_(Sz_) {}
 
   void initialize() {
+    // deterministic worst case
+    if (Cfg_.Definit) {
+      std::iota(A_.rbegin(), A_.rend(), 0);
+      return;
+    }
+
+    // input from file
+    if (Cfg_.InpFile) {
+      qout << "Reading: " << Cfg_.FileName << std::endl;
+      std::ifstream If(Cfg_.FileName);
+      std::istream_iterator<T> In{If}, InS;
+      std::copy(In, InS, A_.begin());
+      return;
+    }
+
+    // random generate
     Dice d(0, Sz_);
     std::generate(A_.begin(), A_.end(), [&] { return d(); });
   }

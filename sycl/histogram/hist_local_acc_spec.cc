@@ -25,6 +25,8 @@ template <typename T> class hist_local_shared_spec;
 
 const static sycl::specialization_id<int> LSZC;
 const static sycl::specialization_id<int> GSZC;
+const static sycl::specialization_id<int> NumBinsC;
+const static sycl::specialization_id<int> NumDataC;
 
 template <typename T>
 class HistogrammLocalAccSpec : public sycltesters::Histogramm<T> {
@@ -59,6 +61,8 @@ public:
             DeviceQueue.get_context(), {KId});
     KbSrc.template set_specialization_constant<LSZC>(LSZ);
     KbSrc.template set_specialization_constant<GSZC>(GSZ);
+    KbSrc.template set_specialization_constant<NumBinsC>(NumBins);
+    KbSrc.template set_specialization_constant<NumDataC>(NumData);
     sycl::kernel_bundle Kb = sycl::build(KbSrc);
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
@@ -72,19 +76,25 @@ public:
         const int L = WorkItem.get_local_id(0);
         const int LSZK = Kh.template get_specialization_constant<LSZC>();
         const int GSZK = Kh.template get_specialization_constant<GSZC>();
+        const int NumBinsK =
+            Kh.template get_specialization_constant<NumBinsC>();
+        const int NumDataK =
+            Kh.template get_specialization_constant<NumDataC>();
 
-        // zero-out local memory
-        for (int I = L; I < NumBins; I += LSZK)
+// zero-out local memory
+#pragma unroll
+        for (int I = L; I < NumBinsK; I += LSZK)
           LocalHist[I].store(0);
         WorkItem.barrier(sycl_local_fence);
 
         // building local histograms
-        for (int I = N; I < NumData; I += GSZK)
+        for (int I = N; I < NumDataK; I += GSZK)
           LocalHist[Data[I]].fetch_add(1);
         WorkItem.barrier(sycl_local_fence);
 
-        // combining all local histograms
-        for (int I = L; I < NumBins; I += LSZK) {
+// combining all local histograms
+#pragma unroll
+        for (int I = L; I < NumBinsK; I += LSZK) {
           const T LocalData = LocalHist[I].load();
           Bins[I].fetch_add(LocalData);
         }

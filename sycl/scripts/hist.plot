@@ -26,6 +26,10 @@ set key left top
 set xlabel "Data size (given GSZ = 65536, LSZ=256)"
 set ylabel "Time (seconds)"
 
+set output "hist_acc.png"
+plot 'hist_local_acc.dat' with linespoints title 'Histogram baseline',\
+     'hist_local.dat' with linespoints title 'Histogram baseline (SVM)'
+
 # private vs local (different sizes)
 set output "hist.png"
 plot 'hist_naive_acc.dat' with linespoints title 'Histogram baseline',\

@@ -37,8 +37,8 @@ public:
     sycltesters::EvtVec_t ProfInfo;
     auto &DeviceQueue = Queue();
     sycl::range<2> Dims(ImW, ImH);
-    sycl::buffer<sycl::float4, 1> Dst(DstData, ImW * ImH);
-    sycl::buffer<sycl::float4, 1> Src(SrcData, ImW * ImH);
+    sycl::buffer<sycl::float4, 2> Dst(DstData, Dims);
+    sycl::buffer<sycl::float4, 2> Src(SrcData, Dims);
     Src.set_final_data(nullptr);
     int FiltSize = Filt.sqrt_size();
     int DataSize = FiltSize * FiltSize;
@@ -56,8 +56,8 @@ public:
     }
 
     // explicit accessor types
-    using ImReadTy = sycl::accessor<sycl::float4, 1, sycl_read, sycl_constant>;
-    using ImWriteTy = sycl::accessor<sycl::float4, 1, sycl_write, sycl_global>;
+    using ImReadTy = sycl::accessor<sycl::float4, 2, sycl_read, sycl_global>;
+    using ImWriteTy = sycl::accessor<sycl::float4, 2, sycl_write, sycl_global>;
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
       ImReadTy InPtr(Src, Cgh);
@@ -76,13 +76,13 @@ public:
             // we have this in-bounds check for image processing
             // sampler does it behind the scenes (in hardware)
             if (X >= 0 && X < ImW && Y >= 0 && Y < ImH) {
-              sycl::float4 Pixel = InPtr[Y * ImW + X];
+              sycl::float4 Pixel = InPtr[Y][X];
               Sum += Pixel * FiltPtr[FiltIndex];
             }
             FiltIndex += 1;
           }
         }
-        OutPtr[Row * ImW + Column] = Sum;
+        OutPtr[Row][Column] = Sum;
       };
 
       Cgh.parallel_for<class filter_2d_buf>(Dims, KernFilter);

@@ -66,7 +66,10 @@ constexpr int DEF_QUIET = 0;
 constexpr int DEF_DETAILED = 0;
 
 // number of random boxes
-constexpr int NBOXES = 10;
+constexpr int NBOXES = 30;
+
+// rotation step
+constexpr int AMT_STEP = 1;
 
 struct Config {
   bool RandImage, Detailed, Visualize, Quiet;
@@ -281,15 +284,28 @@ template <typename RotateChildT> void test_sequence(int argc, char **argv) {
 #endif
 
     if (Cfg.Visualize) {
+#if defined(SHOW_ORIG)
       cimg_library::CImgDisplay MainDisp(Image, "Rotateing image source");
+#endif
 #if defined(MEASURE_NORMAL)
       cimg_library::CImgDisplay ResDispH(ImW, ImH, "Image result: host", 0);
       disp_tester(TesterH.data(), ImW, ImH, ResDispH);
 #endif
       cimg_library::CImgDisplay ResDisp(ImW, ImH, "Image result: GPU", 0);
       disp_tester(Tester.data(), ImW, ImH, ResDisp);
-      while (!MainDisp.is_closed())
+      while (!ResDisp.is_closed()) {
         cimg_library::cimg::wait(20);
+        int Inc = 0;
+        if (ResDisp.is_keyARROWUP())
+          Inc = rotate::AMT_STEP;
+        else if (ResDisp.is_keyARROWDOWN())
+          Inc = -rotate::AMT_STEP;
+        if (Inc != 0) {
+          Cfg.Theta += Inc * std::numbers::pi / 180.0;
+          Tester.calculate(SrcBuffer.data(), Cfg.Theta);
+          disp_tester(Tester.data(), ImW, ImH, ResDisp);
+        }
+      }
     }
   } catch (sycl::exception const &err) {
     std::cerr << "SYCL ERROR: " << err.what() << "\n";

@@ -1,6 +1,6 @@
 #------------------------------------------------------------------------------
 #
-# Leaf CMake build for reduction kernels
+# Leaf CMake build for rotation kernels
 #
 #------------------------------------------------------------------------------
 #
@@ -10,8 +10,7 @@
 #------------------------------------------------------------------------------
 
 set(KERNELS
-  reduce_naive
-  reduce_object
+  rotate_sampler
 )
 
 # build kernels
@@ -20,8 +19,7 @@ foreach(KERNEL ${KERNELS})
 endforeach()
 
 set(TESTING
-  reduce_naive
-  reduce_object
+  rotate_sampler
 )
 
 foreach(KERNEL ${TESTING})

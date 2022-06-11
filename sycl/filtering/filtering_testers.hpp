@@ -270,9 +270,8 @@ class FilterTester {
   std::vector<sycl::float4> DstBuffer_;
 
 public:
-  FilterTester(Filter &Reduce, filter::Config Cfg, int ImW, int ImH)
-      : Filter_(Reduce), Cfg_(Cfg), ImW_(ImW), ImH_(ImH),
-        DstBuffer_(ImW * ImH) {}
+  FilterTester(Filter &Filt, filter::Config Cfg, int ImW, int ImH)
+      : Filter_(Filt), Cfg_(Cfg), ImW_(ImW), ImH_(ImH), DstBuffer_(ImW * ImH) {}
 
   using CalcDataTy = std::pair<unsigned, unsigned long long>;
   CalcDataTy calculate(sycl::float4 *SrcData, drawer::Filter &Filt) {

@@ -109,9 +109,12 @@ add_subdirectory(histogram)
 # reductions
 add_subdirectory(reduction)
 
-# image filtering and samplers
 if(USE_CIMG)
+# image filtering and samplers
 add_subdirectory(filtering)
+
+# image rotation
+add_subdirectory(rotate)
 endif()
 
 # dump folder for shader dumps if any

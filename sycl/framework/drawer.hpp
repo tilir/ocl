@@ -33,7 +33,7 @@ static const unsigned char blue[] = {0, 0, 255};
 
 // display buffer in histogramm mode
 template <typename T>
-void disp_buffer(cimg_library::CImgDisplay &Display, T *Buf, int Width,
+void disp_buffer(cimg_library::CImgDisplay &Display, const T *Buf, int Width,
                  int Height, const unsigned char *Cl) {
   double Ddw = Display.width();
   double Ddh = Display.height();
@@ -71,7 +71,7 @@ inline unsigned char clamp_uchar(float f) {
 }
 
 // float4 array to CImg
-inline void float4_to_img(sycl::float4 *Buf, ImageTy &Img) {
+inline void float4_to_img(const sycl::float4 *Buf, ImageTy &Img) {
   for (int Y = 0; Y < Img.height(); Y++)
     for (int X = 0; X < Img.width(); X++) {
       sycl::float4 Data = *Buf++;

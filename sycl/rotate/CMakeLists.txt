@@ -24,5 +24,5 @@ set(TESTING
 
 foreach(KERNEL ${TESTING})
   add_test(NAME ${KERNEL}_run
-           COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${KERNEL} -quiet)
+           COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${KERNEL} -randboxes=500 -quiet)
 endforeach()

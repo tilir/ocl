@@ -23,11 +23,11 @@
 // class is used for kernel name
 class filter_2d_local_spec;
 
-const static sycl::specialization_id<int> HalfWidthC;
-const static sycl::specialization_id<int> LMEMC;
-const static sycl::specialization_id<int> LSZC;
-const static sycl::specialization_id<int> ImWC;
-const static sycl::specialization_id<int> ImHC;
+constexpr static sycl::specialization_id<int> HalfWidthC;
+constexpr static sycl::specialization_id<int> LMEMC;
+constexpr static sycl::specialization_id<int> LSZC;
+constexpr static sycl::specialization_id<int> ImWC;
+constexpr static sycl::specialization_id<int> ImHC;
 
 using ConfigTy = sycltesters::filter::Config;
 

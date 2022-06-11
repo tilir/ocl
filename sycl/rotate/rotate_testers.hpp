@@ -59,7 +59,7 @@ namespace sycltesters {
 namespace rotate {
 
 constexpr int DEF_IMSZ = 256;
-constexpr int DEF_AMT = 3;
+constexpr int DEF_AMT = 20;
 constexpr int DEF_LSZ = 16;
 constexpr int DEF_NOVIS = 0;
 constexpr int DEF_QUIET = 0;
@@ -178,7 +178,24 @@ struct RotateHost : public Rotate {
   RotateHost(sycl::queue &DeviceQueue) : Rotate(DeviceQueue) {}
   EvtRet_t operator()(sycl::float4 *DstData, sycl::float4 *SrcData, int ImW,
                       int ImH, float Theta) override {
-    std::copy(SrcData, SrcData + ImW * ImH, DstData);
+    std::fill(DstData, DstData + ImW * ImH, sycl::float4{0, 0, 0, 0});
+    float X0 = ImW / 2.0f;
+    float Y0 = ImH / 2.0f;
+
+    qout << "X0 = " << X0 << ", Y0 = " << Y0 << "\n";
+
+    for (int Row = 0; Row < ImH; ++Row) {
+      for (int Column = 0; Column < ImW; ++Column) {
+        float Xprime = Column - X0;
+        float Yprime = Row - Y0;
+
+        int Xr = Xprime * cos(Theta) - Yprime * sin(Theta) + X0;
+        int Yr = Xprime * sin(Theta) + Yprime * cos(Theta) + Y0;
+
+        if ((Xr < ImW) && (Yr < ImH) && (Xr >= 0) && (Yr >= 0))
+          DstData[Row * ImW + Column] = SrcData[Yr * ImW + Xr];
+      }
+    }
     return {}; // nothing to construct as event
   }
 };

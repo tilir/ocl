@@ -64,7 +64,7 @@ namespace sycltesters {
 namespace hist {
 
 constexpr int DEF_BSZ = 1024;
-constexpr int DEF_SZ = 10000; // data size in blocks
+constexpr int DEF_SZ = 8192; // data size in blocks
 constexpr int DEF_HSZ = 256;
 constexpr int DEF_GSZ = 64; // global iteration space in blocks
 constexpr int DEF_LSZ = 32;
@@ -110,9 +110,9 @@ inline Config read_config(int argc, char **argv) {
   Cfg.Vis = OptParser.exists("vis");
   Cfg.Zero = OptParser.exists("zero");
   Cfg.Detailed = OptParser.exists("detailed");
+  Cfg.Quiet = OptParser.exists("quiet");
 
-  if (OptParser.exists("quiet")) {
-    Cfg.Quiet = true;
+  if (Cfg.Quiet) {
     Cfg.Vis = false; // quiet implies novis of course
     qout.set(Cfg.Quiet);
   }
@@ -202,7 +202,8 @@ public:
 template <typename T>
 void dump_hist(std::ostream &Os, std::string Name, const T *Data, int Sz) {
   Os << Name << ":\n";
-  visualize_seq(Data, Data + Sz, Os);
+  // 16 in a row is convenient if numbers are small
+  visualize_seq_break(Data, Data + Sz, 16, Os);
   Os << "\n";
 }
 

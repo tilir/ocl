@@ -5,6 +5,8 @@ set(KERNELS
   hist_local_acc
   hist_local_acc_spec
   hist_private
+# excluded from testing
+  hist_private_sg
 )
 
 # build kernels

@@ -72,4 +72,17 @@ void visualize_seq(It Begin, It End, Os &Stream) {
   Stream << "\n";
 }
 
+template <typename It, typename Os>
+void visualize_seq_break(It Begin, It End, int N, Os &Stream) {
+  using Ty = typename std::iterator_traits<It>::value_type;
+  std::ostream_iterator<Ty> Out{Stream, " "};
+  auto Dist = std::distance(Begin, End);
+  for (int I = 0; I < Dist / N; ++I, std::advance(Begin, N)) {
+    std::copy_n(Begin, N, Out);
+    Stream << "\n";
+  }
+  std::copy(Begin, End, Out);
+  Stream << "\n";
+}
+
 } // namespace sycltesters

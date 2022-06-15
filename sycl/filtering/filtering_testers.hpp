@@ -78,7 +78,7 @@ constexpr int MINVAL = -16;
 constexpr int MAXVAL = 16;
 
 // number of random boxes
-constexpr int NBOXES = 10;
+constexpr int NBOXES = 30;
 
 struct Config {
   bool Detailed, RandImage = false, RandFilter = false, Visualize = true,
@@ -202,7 +202,8 @@ inline ImageTy init_image(filter::Config Cfg) {
   if (Cfg.RandImage) {
     qout << "Generating Image with random boxes\n";
     ImageTy Image(Cfg.RandImSz, Cfg.RandImSz, 1, 3, 255);
-    drawer::random_boxes(filter::NBOXES, Image);
+    drawer::random_boxes_rgb(filter::NBOXES, Image, Image.height(),
+                             Image.width(), drawer::ItemPatternTy::OutLined);
     return Image;
   }
 

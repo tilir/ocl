@@ -51,6 +51,13 @@ void disp_buffer(cimg_library::CImgDisplay &Display, const T *Buf, int Width,
 
 constexpr float Normalize = 255.0f;
 
+// single-channel CImg to float array
+template <typename T> inline void img_to_scalar(ImageTy &Img, T *Buf) {
+  for (int Y = 0; Y < Img.height(); Y++)
+    for (int X = 0; X < Img.width(); X++)
+      *Buf++ = Img(X, Y, 0, 0) / Normalize;
+}
+
 // CImg to float4 array
 inline void img_to_float4(ImageTy &Img, sycl::float4 *Buf) {
   for (int Y = 0; Y < Img.height(); Y++)
@@ -72,28 +79,66 @@ inline unsigned char clamp_uchar(float f) {
 
 // float4 array to CImg
 inline void float4_to_img(const sycl::float4 *Buf, ImageTy &Img) {
-  for (int Y = 0; Y < Img.height(); Y++)
+  for (int Y = 0; Y < Img.height(); Y++) {
     for (int X = 0; X < Img.width(); X++) {
       sycl::float4 Data = *Buf++;
       Img(X, Y, 0, 0) = clamp_uchar(Data[0] * Normalize);
       Img(X, Y, 0, 1) = clamp_uchar(Data[1] * Normalize);
       Img(X, Y, 0, 2) = clamp_uchar(Data[2] * Normalize);
     }
+  }
 }
 
-// put N random boxes, uniformly distributed
-inline void random_boxes(int N, ImageTy &Img) {
-  int ImH = Img.height();
-  int ImW = Img.width();
+template <typename T> void scalar_to_img(const T *Buf, ImageTy &Img) {
+  for (int Y = 0; Y < Img.height(); Y++) {
+    for (int X = 0; X < Img.width(); X++) {
+      T Data = *Buf++;
+      Img(X, Y, 0, 0) = clamp_uchar(Data * Normalize);
+    }
+  }
+}
 
-  sycltesters::Dice DH(0, ImH - 1), DW(0, ImW - 1), DC(0, 255);
+enum class ItemPatternTy {
+  Filled,
+  OutLined,
+};
+
+// put N random boxes, uniformly distributed
+// RGB image version
+inline void random_boxes_rgb(int N, ImageTy &Img, int BoxH, int BoxW,
+                             ItemPatternTy Style = ItemPatternTy::Filled) {
+  sycltesters::Dice DH(0, BoxH - 1), DW(0, BoxW - 1), DC(0, 255);
   for (int I = 0; I < N; ++I) {
     unsigned char color[3] = {DC(), DC(), DC()};
     int X0 = DW(), X1 = DW(), Y0 = DH(), Y1 = DH();
     int XU = std::min(X0, X1), XD = std::max(X0, X1);
     int YU = std::min(Y0, Y1), YD = std::max(Y0, Y1);
-    Img.draw_rectangle(XU, YU, XD, YD, color);
+    if (Style == ItemPatternTy::Filled)
+      Img.draw_rectangle(XU, YU, XD, YD, color);
+    else
+      Img.draw_rectangle(XU, YU, XD, YD, color, 1.0f, ~0u);
   }
+}
+
+// put N random boxes, uniformly distributed
+// monotonic image version
+inline void random_boxes_mono(int N, ImageTy &Img, int BoxH, int BoxW,
+                              ItemPatternTy Style = ItemPatternTy::Filled) {
+  sycltesters::Dice DH(0, BoxH - 1), DW(0, BoxW - 1);
+  for (int I = 0; I < N; ++I) {
+    unsigned char color[1] = {0};
+    int X0 = DW(), X1 = DW(), Y0 = DH(), Y1 = DH();
+    int XU = std::min(X0, X1), XD = std::max(X0, X1);
+    int YU = std::min(Y0, Y1), YD = std::max(Y0, Y1);
+    if (Style == ItemPatternTy::Filled)
+      Img.draw_rectangle(XU, YU, XD, YD, color);
+    else
+      Img.draw_rectangle(XU, YU, XD, YD, color, 1.0f, ~0u);
+  }
+}
+
+inline void random_boxes(int N, ImageTy &Img) {
+  random_boxes_rgb(N, Img, Img.height(), Img.width());
 }
 
 // 2D convolution kernel

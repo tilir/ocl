@@ -115,6 +115,9 @@ add_subdirectory(filtering)
 
 # image rotation
 add_subdirectory(rotate)
+
+# knuth-style boolean machines
+add_subdirectory(boolmachines)
 endif()
 
 # dump folder for shader dumps if any

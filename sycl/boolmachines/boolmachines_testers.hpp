@@ -354,12 +354,32 @@ void test_sequence(int argc, char **argv) {
                                         0);
       disp_tester(Tester.data(), ImW, ImH, ResDisp);
       while (!ResDisp.is_closed()) {
-        cimg_library::cimg::wait(20);
+        cimg_library::cimg::wait(50);
+        bool Updated = false;
         if (ResDisp.is_keyARROWDOWN()) {
           // TODO: this is too naive, make double-buffering!
-          std::copy(Tester.begin(), Tester.end(), SrcBuffer.begin());
+          for (int I = 0; I < 100; ++I) {
+            std::copy(Tester.begin(), Tester.end(), SrcBuffer.begin());
+            Tester.calculate(SrcBuffer.data(), BM);
+          }
+          Updated = true;
+        }
+        if (ResDisp.is_keyARROWUP()) {
+          auto Image = boolmachine::init_image(Cfg);
+          drawer::img_to_scalar<MachineCellTy>(Image, SrcData);
           Tester.calculate(SrcBuffer.data(), BM);
+          Updated = true;
+        }
+        if (ResDisp.is_keyARROWRIGHT()) {
+          boolmachine::BoolMachineTy BM = boolmachine::init_boolmachine(Cfg);
+          auto Image = boolmachine::init_image(Cfg);
+          drawer::img_to_scalar<MachineCellTy>(Image, SrcData);
+          Tester.calculate(SrcBuffer.data(), BM);
+          Updated = true;
+        }
+        if (Updated) {
           disp_tester(Tester.data(), ImW, ImH, ResDisp);
+          ResDisp.flush();
         }
       }
     }

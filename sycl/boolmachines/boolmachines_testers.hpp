@@ -73,7 +73,7 @@ constexpr int DEF_QUIET = 0;
 constexpr int NBOXES = 30;
 
 // fast-forward iteration number
-constexpr int FF_ITER_COUNT = 100;
+constexpr int FF_ITER_COUNT = 300;
 
 struct Config {
   bool RandMachine, Detailed, Visualize, Quiet, LocOverflow = false;
@@ -297,9 +297,21 @@ public:
   }
 
   void disp_dst(cimg_library::CImgDisplay &Disp) {
+    unsigned char black[1] = {0};
+    unsigned char white[1] = {255};
     MachineCellTy *Dst = FstActive ? SndBuffer_.data() : FstBuffer_.data();
     ImageTy ResImg(ImW_, ImH_, 1, 1, 255); // W x H x 1 with 1 color depth
     drawer::scalar_to_img<MachineCellTy>(Dst, ResImg);
+    ResImg.draw_text(ImW_ - 200, ImH_ - 13 * 6, " down : one step of machine ",
+                     white, black, /* opacity */ 1, /* font */ 13);
+    ResImg.draw_text(ImW_ - 200, ImH_ - 13 * 5, " f : fast forward ", white,
+                     black, /* opacity */ 1, /* font */ 13);
+    ResImg.draw_text(ImW_ - 200, ImH_ - 13 * 4,
+                     " r : reinit machine and image ", white, black,
+                     /* opacity */ 1, /* font */ 13);
+    ResImg.draw_text(ImW_ - 200, ImH_ - 13 * 3,
+                     " i : reinit image, keep machine ", white, black,
+                     /* opacity */ 1, /* font */ 13);
     Disp.display(ResImg);
   }
 

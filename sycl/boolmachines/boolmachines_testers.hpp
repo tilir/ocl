@@ -72,6 +72,9 @@ constexpr int DEF_QUIET = 0;
 // number of random boxes
 constexpr int NBOXES = 30;
 
+// fast-forward iteration number
+constexpr int FF_ITER_COUNT = 100;
+
 struct Config {
   bool RandMachine, Detailed, Visualize, Quiet, LocOverflow = false;
   int RandImSz, LocSz;
@@ -264,35 +267,65 @@ class BoolMachineTester {
   BoolMachine &BoolMachine_;
   boolmachine::Config Cfg_;
   int ImW_, ImH_;
-  std::vector<MachineCellTy> DstBuffer_;
+  std::vector<MachineCellTy> FstBuffer_, SndBuffer_;
+  bool FstActive;
+
+  // ref-to-vector looks ugly but I need resize
+  static auto initbm(std::vector<MachineCellTy> &SrcVec,
+                     boolmachine::Config Cfg) {
+    auto Image = boolmachine::init_image(Cfg);
+    int ImW = Image.width();
+    int ImH = Image.height();
+    SrcVec.resize(ImW * ImH);
+    drawer::img_to_scalar<MachineCellTy>(Image, SrcVec.data());
+    return std::make_pair(ImW, ImH);
+  }
 
 public:
-  BoolMachineTester(BoolMachine &BM, boolmachine::Config Cfg, int ImW, int ImH)
-      : BoolMachine_(BM), Cfg_(Cfg), ImW_(ImW), ImH_(ImH),
-        DstBuffer_(ImW * ImH) {}
+  BoolMachineTester(BoolMachine &BM, boolmachine::Config Cfg)
+      : BoolMachine_(BM), Cfg_(Cfg) {
+    std::tie(ImW_, ImH_) = initbm(FstBuffer_, Cfg_);
+    assert(FstBuffer_.size() == ImW_ * ImH_);
+    SndBuffer_.resize(FstBuffer_.size());
+    FstActive = true;
+  }
+
+  void reinit() {
+    std::tie(ImW_, ImH_) = initbm(FstBuffer_, Cfg_);
+    SndBuffer_.resize(FstBuffer_.size());
+    FstActive = true;
+  }
+
+  void disp_dst(cimg_library::CImgDisplay &Disp) {
+    MachineCellTy *Dst = FstActive ? SndBuffer_.data() : FstBuffer_.data();
+    ImageTy ResImg(ImW_, ImH_, 1, 1, 255); // W x H x 1 with 1 color depth
+    drawer::scalar_to_img<MachineCellTy>(Dst, ResImg);
+    Disp.display(ResImg);
+  }
 
   using CalcDataTy = std::pair<unsigned, unsigned long long>;
-  CalcDataTy calculate(MachineCellTy *SrcData, boolmachine::BoolMachineTy &BM) {
+
+  // Double buffering. Next calculation uses buffer from previous one.
+  CalcDataTy calculate(boolmachine::BoolMachineTy &BM) {
+    MachineCellTy *Dst = FstActive ? SndBuffer_.data() : FstBuffer_.data();
+    MachineCellTy *Src = FstActive ? FstBuffer_.data() : SndBuffer_.data();
+    FstActive = !FstActive;
     Timer Tm;
     Tm.start();
-    EvtRet_t Ret = BoolMachine_(DstBuffer_.data(), SrcData, ImW_, ImH_, BM);
+    EvtRet_t Ret = BoolMachine_(Dst, Src, ImW_, ImH_, BM);
     Tm.stop();
     auto EvtTiming = getTime(Ret, Cfg_.Detailed ? false : true);
     return {Tm.elapsed(), EvtTiming};
   }
 
-  auto begin() { return DstBuffer_.begin(); }
-  auto end() { return DstBuffer_.end(); }
-  MachineCellTy *data() { return DstBuffer_.data(); }
+  auto begin() { return FstActive ? SndBuffer_.begin() : FstBuffer_.begin(); }
+  auto end() { return FstActive ? SndBuffer_.end() : FstBuffer_.end(); }
+  MachineCellTy *data() {
+    return FstActive ? SndBuffer_.data() : FstBuffer_.data();
+  }
+  int width() const { return ImW_; }
+  int height() const { return ImH_; }
 };
-
-template <typename Ty>
-void disp_tester(const Ty *Data, int ImW, int ImH,
-                 cimg_library::CImgDisplay &Disp) {
-  ImageTy ResImg(ImW, ImH, 1, 1, 255); // W x H x 1 with 1 color depth
-  drawer::scalar_to_img<Ty>(Data, ResImg);
-  Disp.display(ResImg);
-}
 
 template <typename BoolMachineChildT>
 void test_sequence(int argc, char **argv) {
@@ -303,37 +336,29 @@ void test_sequence(int argc, char **argv) {
     auto Q = set_queue();
     print_info(qout, Q.get_device());
 
-    auto Image = boolmachine::init_image(Cfg);
-    const auto ImW = Image.width();
-    const auto ImH = Image.height();
-    qout << "Range: " << ImW << " x " << ImH << "\n";
-    std::vector<MachineCellTy> SrcBuffer(ImW * ImH);
-    auto *SrcData = SrcBuffer.data();
-    drawer::img_to_scalar<MachineCellTy>(Image, SrcData);
     boolmachine::BoolMachineTy BM = boolmachine::init_boolmachine(Cfg);
-
     boolmachine::check_device_props(Q.get_device(), Cfg, BM);
 
 #if defined(MEASURE_NORMAL)
     qout << "Calculating host\n";
     BoolMachineHost BoolMachineHost{Q}; // arg unused
-    BoolMachineTester TesterH{BoolMachineHost, Cfg, ImW, ImH};
-    auto ElapsedH = TesterH.calculate(SrcData, BM);
+    BoolMachineTester TesterH{BoolMachineHost, Cfg};
+    auto ElapsedH = TesterH.calculate(BM);
     qout << "Measured host time: " << ElapsedH.first / msec_per_sec << "\n";
 #endif
 
     BoolMachineChildT BoolMachineGPU{Q, Cfg};
-    BoolMachineTester Tester{BoolMachineGPU, Cfg, ImW, ImH};
+    BoolMachineTester Tester{BoolMachineGPU, Cfg};
     qout << "Calculating GPU\n";
-    auto Elapsed = Tester.calculate(SrcData, BM);
+    auto Elapsed = Tester.calculate(BM);
     qout << "Measured time: " << Elapsed.first / msec_per_sec << "\n";
     auto ExecTime = Elapsed.second / nsec_per_sec;
     qout << "Pure execution time: " << ExecTime << "\n";
 
-    // Quiet mode output: boolmachine size, elapsed time
+    // Quiet mode output: image size, elapsed time
     if (Cfg.Quiet) {
       qout.set(!Cfg.Quiet);
-      qout << ImW << " " << ExecTime << "\n";
+      qout << Tester.width() << " " << ExecTime << "\n";
       qout.set(Cfg.Quiet);
     }
 
@@ -346,39 +371,43 @@ void test_sequence(int argc, char **argv) {
       cimg_library::CImgDisplay MainDisp(Image, "BoolMachine image source");
 #endif
 #if defined(MEASURE_NORMAL)
-      cimg_library::CImgDisplay ResDispH(ImW, ImH, "BoolMachine host result",
-                                         0);
-      disp_tester(TesterH.data(), ImW, ImH, ResDispH);
+      cimg_library::CImgDisplay ResDispH(TesterH.width(), TesterH.height(),
+                                         "BoolMachine host result", 0);
+      TesterH.disp_dst(ResDispH);
 #endif
-      cimg_library::CImgDisplay ResDisp(ImW, ImH, "BoolMachine image result",
-                                        0);
-      disp_tester(Tester.data(), ImW, ImH, ResDisp);
+      cimg_library::CImgDisplay ResDisp(Tester.width(), Tester.height(),
+                                        "BoolMachine image result", 0);
+      Tester.disp_dst(ResDisp);
       while (!ResDisp.is_closed()) {
         cimg_library::cimg::wait(50);
         bool Updated = false;
+        // key down for one calcualtion
         if (ResDisp.is_keyARROWDOWN()) {
-          // TODO: this is too naive, make double-buffering!
-          for (int I = 0; I < 100; ++I) {
-            std::copy(Tester.begin(), Tester.end(), SrcBuffer.begin());
-            Tester.calculate(SrcBuffer.data(), BM);
-          }
+          Tester.calculate(BM);
           Updated = true;
         }
-        if (ResDisp.is_keyARROWUP()) {
-          auto Image = boolmachine::init_image(Cfg);
-          drawer::img_to_scalar<MachineCellTy>(Image, SrcData);
-          Tester.calculate(SrcBuffer.data(), BM);
+        // 'r' for bool machine re-generate
+        // image also re-inited
+        if (ResDisp.is_key(cimg_library::cimg::keyR)) {
+          BM = boolmachine::init_boolmachine(Cfg);
+          Tester.reinit();
+          Tester.calculate(BM);
           Updated = true;
         }
-        if (ResDisp.is_keyARROWRIGHT()) {
-          boolmachine::BoolMachineTy BM = boolmachine::init_boolmachine(Cfg);
-          auto Image = boolmachine::init_image(Cfg);
-          drawer::img_to_scalar<MachineCellTy>(Image, SrcData);
-          Tester.calculate(SrcBuffer.data(), BM);
+        // 'i' for image reload with same machine
+        if (ResDisp.is_key(cimg_library::cimg::keyI)) {
+          Tester.reinit();
+          Tester.calculate(BM);
+          Updated = true;
+        }
+        // 'f' for 'fast forward'
+        if (ResDisp.is_key(cimg_library::cimg::keyF)) {
+          for (int I = 0; I < boolmachine::FF_ITER_COUNT; ++I)
+            Tester.calculate(BM);
           Updated = true;
         }
         if (Updated) {
-          disp_tester(Tester.data(), ImW, ImH, ResDisp);
+          Tester.disp_dst(ResDisp);
           ResDisp.flush();
         }
       }

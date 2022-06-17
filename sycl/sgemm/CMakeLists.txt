@@ -1,5 +1,6 @@
 set(KERNELS
   matmult
+  matmult_device
   matmult_specialization
   matmult_specialization_svm
   matmult_transposed
@@ -18,6 +19,7 @@ endforeach()
 # special targets with defines
 buildv(matmult_nopriv matmult.cc "NOPRIVATE=1")
 buildv(matmult_notrans matmult_transposed.cc "NONTRANSPOSED=1")
+buildv(matmult_shared matmult_device.cc "SHARED=1")
 # excluded from testing
 buildv(matmult_local_nobarrier matmult_local.cc "NOBARRIER=1")
 
@@ -30,6 +32,8 @@ endif()
 
 set(TESTING  
   matmult
+  matmult_device
+  matmult_shared
   matmult_transposed
   matmult_notrans
   matmult_specialization

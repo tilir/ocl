@@ -9,6 +9,8 @@ set(KERNELS
   matmult_local_shared_spec
   matmult_groups
   matmult_groups_priv
+# excluded from testing
+  matmult_system
 )
 
 # common includes and libs
@@ -20,6 +22,7 @@ endforeach()
 buildv(matmult_nopriv matmult.cc "NOPRIVATE=1")
 buildv(matmult_notrans matmult_transposed.cc "NONTRANSPOSED=1")
 buildv(matmult_shared matmult_device.cc "SHARED=1")
+buildv(matmult_usm matmult_system.cc "USM_ALLOC=1")
 # excluded from testing
 buildv(matmult_local_nobarrier matmult_local.cc "NOBARRIER=1")
 
@@ -34,6 +37,7 @@ set(TESTING
   matmult
   matmult_device
   matmult_shared
+  matmult_usm
   matmult_transposed
   matmult_notrans
   matmult_specialization

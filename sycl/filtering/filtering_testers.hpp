@@ -163,6 +163,7 @@ inline void check_device_props(sycl::device D, Config &Cfg,
   int HalfWidth = FiltSize / 2;
   int LocMem = Cfg.LocSz + HalfWidth * 2;
   int ReqMem = LocMem * LocMem * sizeof(sycl::float4);
+  qout << "Required local mem size: " << ReqMem << " bytes" << std::endl;
   if (ReqMem > MaxLMEM) {
     qout << "Warning: " << ReqMem << " bytes of local memory will be required "
          << "which exceeds max local memory" << std::endl;

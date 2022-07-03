@@ -7,7 +7,13 @@
 //  * inherited from testers.hpp: RUNHOST, INORD...
 //
 // Options to control things:
-// -randboxes=<sz> : random boxes image sz x sz
+// -imw=<width>
+// -imh=<height>
+// -randboxes : random boxes image imw x imh
+// -img=<path> : starting image from file
+// if boxes/image not specified, start with imw x imh with
+// single black dot in the center
+//
 // -machine=<machine> : path to machine, rand machine will be used otherwise
 // -randmachine : random machine 3x3
 // -lsz=<l> : local iteration space
@@ -62,7 +68,9 @@ namespace sycltesters {
 // so this namespace is required in each.
 namespace boolmachine {
 
-constexpr int DEF_IMSZ = 256;
+constexpr int DEF_IMW = 512;
+constexpr int DEF_IMH = 512;
+constexpr int DEF_RB = 0;
 constexpr int DEF_BM = 0;
 constexpr int DEF_LSZ = 16;
 constexpr int DEF_DETAILED = 0;
@@ -76,15 +84,20 @@ constexpr int NBOXES = 30;
 constexpr int FF_ITER_COUNT = 300;
 
 struct Config {
-  bool RandMachine, Detailed, Visualize, Quiet, LocOverflow = false;
-  int RandImSz, LocSz;
-  std::string BoolMachinePath;
+  bool SingleDot, RandBoxes, RandMachine, Detailed, Visualize, Quiet,
+      LocOverflow = false;
+  int LocSz, ImW, ImH;
+  std::string BoolMachinePath, ImagePath;
 };
 
 inline Config read_config(int argc, char **argv) {
   Config Cfg;
   options::Parser OptParser;
-  OptParser.template add<int>("randboxes", DEF_IMSZ, "random boxes image");
+  OptParser.template add<int>("imw", DEF_IMW, "image width");
+  OptParser.template add<int>("imh", DEF_IMH, "image height");
+  OptParser.template add<int>("randboxes", DEF_RB, "random boxes image");
+  OptParser.template add<std::string>("img", "", "image to apply machine");
+
   OptParser.template add<std::string>("machine", "", "boolmachine to apply");
   OptParser.template add<int>("randmachine", DEF_BM,
                               "generate random boolmachine");
@@ -95,7 +108,12 @@ inline Config read_config(int argc, char **argv) {
   OptParser.template add<int>("quiet", DEF_QUIET, "quiet mode for bulk runs");
   OptParser.parse(argc, argv);
 
-  Cfg.RandImSz = OptParser.template get<int>("randboxes");
+  Cfg.RandBoxes = OptParser.exists("randboxes");
+  Cfg.ImW = OptParser.template get<int>("imw");
+  Cfg.ImH = OptParser.template get<int>("imh");
+  Cfg.ImagePath = OptParser.template get<std::string>("img");
+  Cfg.SingleDot = !OptParser.exists("randboxes") && Cfg.ImagePath.empty();
+
   Cfg.BoolMachinePath = OptParser.template get<std::string>("machine");
   Cfg.RandMachine =
       OptParser.exists("randmachine") || Cfg.BoolMachinePath.empty();
@@ -209,11 +227,30 @@ inline BoolMachineTy init_boolmachine(boolmachine::Config Cfg) {
 }
 
 inline ImageTy init_image(boolmachine::Config Cfg) {
-  qout << "Generating Image with random boxes\n";
-  ImageTy Image(Cfg.RandImSz, Cfg.RandImSz, 1, 1, 255);
-  drawer::random_boxes_mono(boolmachine::NBOXES, Image, Image.height(),
-                            Image.width(), drawer::ItemPatternTy::OutLined);
-  return Image;
+  if (!Cfg.ImagePath.empty()) {
+    qout << "Initializing with image: " << Cfg.ImagePath << "\n";
+    ImageTy Image(Cfg.ImagePath.c_str());
+    return Image;
+  }
+
+  if (Cfg.RandBoxes) {
+    qout << "Generating Image with random boxes\n";
+    ImageTy Image(Cfg.ImW, Cfg.ImH, 1, 1, 255);
+
+    drawer::random_boxes_mono(boolmachine::NBOXES, Image, Image.height(),
+                              Image.width(), drawer::ItemPatternTy::OutLined);
+    return Image;
+  }
+
+  if (Cfg.SingleDot) {
+    qout << "Generating Image with single central dot\n";
+    ImageTy Image(Cfg.ImW, Cfg.ImH, 1, 1, 255);
+    unsigned char color[1] = {0};
+    Image.draw_point(Cfg.ImW / 2, Cfg.ImH / 2, color);
+    return Image;
+  }
+
+  throw std::runtime_error("Need image");
 }
 
 } // namespace boolmachine

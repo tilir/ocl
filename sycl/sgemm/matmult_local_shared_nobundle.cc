@@ -2,7 +2,7 @@
 //
 // Matrix multiplication with local memory kernel (SYCL vs serial CPU).
 // Uses shared memory instead of buffers.
-// Demonstrates specialization constants via kernel bundle.
+// Demonstrates specialization constants via direct specialization.
 //
 // try: matmult_local_shared.exe -lsz=16
 //
@@ -60,21 +60,14 @@ public:
     sycl::range<2> BlockSize{LSZ, LSZ};
     sycl::nd_range<2> Range{sycl::range<2>{AX, BY}, BlockSize};
 
-    sycl::kernel_id KId = sycl::get_kernel_id<mmult_local_shared_spec<T>>();
-    sycl::kernel_bundle KbSrc =
-        sycl::get_kernel_bundle<sycl::bundle_state::input>(
-            DeviceQueue.get_context(), {KId});
-    KbSrc.template set_specialization_constant<AYC>(AY);
-    KbSrc.template set_specialization_constant<BYC>(BY);
-    KbSrc.template set_specialization_constant<LSZC>(LSZ);
-    sycl::kernel_bundle Kb = sycl::build(KbSrc);
-
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
+      Cgh.template set_specialization_constant<AYC>(AY);
+      Cgh.template set_specialization_constant<BYC>(BY);
+      Cgh.template set_specialization_constant<LSZC>(LSZ);
+
       // local memory
       using LTy = sycl::accessor<T, 2, sycl_read_write, sycl_local>;
       LTy Asub{BlockSize, Cgh}, Bsub{BlockSize, Cgh};
-
-      Cgh.use_kernel_bundle(Kb);
 
       auto KernMul = [=](sycl::nd_item<2> It, sycl::kernel_handler Kh) {
         const int Row = It.get_local_id(0);

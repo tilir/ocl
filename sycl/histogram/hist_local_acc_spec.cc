@@ -23,10 +23,10 @@ using ConfigTy = sycltesters::hist::Config;
 // class is used for kernel name
 template <typename T> class hist_local_shared_spec;
 
-const static sycl::specialization_id<int> LSZC;
-const static sycl::specialization_id<int> GSZC;
-const static sycl::specialization_id<int> NumBinsC;
-const static sycl::specialization_id<int> NumDataC;
+constexpr static sycl::specialization_id<int> LSZC;
+constexpr static sycl::specialization_id<int> GSZC;
+constexpr static sycl::specialization_id<int> NumBinsC;
+constexpr static sycl::specialization_id<int> NumDataC;
 
 template <typename T>
 class HistogrammLocalAccSpec : public sycltesters::Histogramm<T> {

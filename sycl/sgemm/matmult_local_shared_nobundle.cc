@@ -22,7 +22,7 @@
 #include "sgemm_testers.hpp"
 
 // class is used for kernel name
-template <typename T> class mmult_local_shared_spec;
+template <typename T> class mmult_local_shared_nobundle;
 
 constexpr sycl::specialization_id<int> AYC;
 constexpr sycl::specialization_id<int> BYC;
@@ -31,12 +31,12 @@ constexpr sycl::specialization_id<int> LSZC;
 using ConfigTy = sycltesters::sgemm::Config;
 
 template <typename T>
-class MatrixMultLocalSharedSpec : public sycltesters::MatrixMult<T> {
+class MatrixMultLocalSharedNoBundle : public sycltesters::MatrixMult<T> {
   using sycltesters::MatrixMult<T>::Queue;
   ConfigTy Cfg_;
 
 public:
-  MatrixMultLocalSharedSpec(sycl::queue &DeviceQueue, ConfigTy Cfg)
+  MatrixMultLocalSharedNoBundle(sycl::queue &DeviceQueue, ConfigTy Cfg)
       : sycltesters::MatrixMult<T>(DeviceQueue), Cfg_(Cfg) {}
 
   sycltesters::EvtRet_t operator()(const T *Aptr, const T *Bptr, T *Cptr,
@@ -97,7 +97,7 @@ public:
         C[GlobalRow * BYK + GlobalCol] = Sum;
       };
 
-      Cgh.parallel_for<class mmult_local_shared_spec<T>>(Range, KernMul);
+      Cgh.parallel_for<class mmult_local_shared_nobundle<T>>(Range, KernMul);
     });
 
     ProfInfo.push_back(Evt);
@@ -113,5 +113,5 @@ public:
 };
 
 int main(int argc, char **argv) {
-  sycltesters::test_sequence<MatrixMultLocalSharedSpec<float>>(argc, argv);
+  sycltesters::test_sequence<MatrixMultLocalSharedNoBundle<float>>(argc, argv);
 }

@@ -23,8 +23,8 @@
 // class is used for kernel name
 template <typename T> class mmult_shared_transposed;
 
-const static sycl::specialization_id<int> AYC;
-const static sycl::specialization_id<int> BYC;
+constexpr sycl::specialization_id<int> AYC;
+constexpr sycl::specialization_id<int> BYC;
 
 using ConfigTy = sycltesters::sgemm::Config;
 

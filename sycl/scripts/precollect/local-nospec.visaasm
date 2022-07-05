@@ -1,0 +1,453 @@
+.version 4.0
+.kernel "_ZTS18mmult_local_sharedIfE"
+
+/// VISA Predefined Variables
+// .decl V0 v_type=G v_name=%null
+// .decl V1 v_type=G v_name=%thread_x
+// .decl V2 v_type=G v_name=%thread_y
+// .decl V3 v_type=G v_name=%group_id_x
+// .decl V4 v_type=G v_name=%group_id_y
+// .decl V5 v_type=G v_name=%group_id_z
+// .decl V6 v_type=G v_name=%tsc
+// .decl V7 v_type=G v_name=%r0
+// .decl V8 v_type=G v_name=%arg
+// .decl V9 v_type=G v_name=%retval
+// .decl V10 v_type=G v_name=%sp
+// .decl V11 v_type=G v_name=%fp
+// .decl V12 v_type=G v_name=%hw_id
+// .decl V13 v_type=G v_name=%sr0
+// .decl V14 v_type=G v_name=%cr0
+// .decl V15 v_type=G v_name=%ce0
+// .decl V16 v_type=G v_name=%dbg0
+// .decl V17 v_type=G v_name=%color
+// .decl V18 v_type=G v_name=%impl_arg_buf_ptr
+// .decl V19 v_type=G v_name=%local_id_buf_ptr
+// .decl T0 v_type=T v_name=%slm
+// .decl T1 v_type=T v_name=T1
+// .decl T2 v_type=T v_name=T2
+// .decl T3 v_type=T v_name=TSS
+// .decl T4 v_type=T v_name=%bss
+// .decl T5 v_type=T v_name=%scratch
+
+.decl V0032 v_type=G type=d num_elts=8 align=hword
+.decl V0033 v_type=G type=d num_elts=8 align=hword alias=<%r0, 0>
+.decl V0034 v_type=G type=d num_elts=1 align=dword
+.decl V0035 v_type=G type=q num_elts=1 align=qword
+.decl V0036 v_type=G type=ud num_elts=1 align=dword
+.decl V0037 v_type=G type=q num_elts=1 align=qword
+.decl V0038 v_type=G type=d num_elts=8 align=hword
+.decl V0039 v_type=G type=d num_elts=8 align=hword alias=<%r0, 0>
+.decl V0040 v_type=G type=d num_elts=8 align=hword
+.decl V0041 v_type=G type=w num_elts=16 align=hword
+.decl V0042 v_type=G type=w num_elts=16 align=hword
+.decl V0043 v_type=G type=w num_elts=16 align=hword
+.decl V0044 v_type=G type=w num_elts=16 align=hword
+.decl V0045 v_type=G type=w num_elts=16 align=hword
+.decl V0046 v_type=G type=w num_elts=16 align=hword
+.decl V0047 v_type=G type=uq num_elts=1 align=qword
+.decl V0048 v_type=G type=q num_elts=1 align=qword
+.decl V0049 v_type=G type=q num_elts=1 align=qword
+.decl V0050 v_type=G type=q num_elts=1 align=qword
+.decl V0051 v_type=G type=q num_elts=1 align=qword
+.decl V0052 v_type=G type=q num_elts=1 align=qword
+.decl V0053 v_type=G type=q num_elts=1 align=qword
+.decl V0054 v_type=G type=q num_elts=1 align=qword
+.decl V0055 v_type=G type=q num_elts=1 align=qword
+.decl V0056 v_type=G type=q num_elts=1 align=qword
+.decl V0057 v_type=G type=q num_elts=1 align=qword
+.decl V0058 v_type=G type=q num_elts=1 align=qword
+.decl V0059 v_type=G type=q num_elts=1 align=qword
+.decl V0060 v_type=G type=d num_elts=1 align=dword
+.decl V0061 v_type=G type=d num_elts=1 align=dword
+.decl V0062 v_type=G type=d num_elts=1 align=dword
+.decl V0063 v_type=G type=d num_elts=2 align=dword
+.decl V0064 v_type=G type=d num_elts=2 align=qword alias=<V0035, 0>
+.decl V0065 v_type=G type=d num_elts=1 align=dword
+.decl V0066 v_type=G type=d num_elts=2 align=qword alias=<V0037, 0>
+.decl V0067 v_type=G type=d num_elts=1 align=dword
+.decl V0068 v_type=G type=d num_elts=1 align=dword alias=<V0036, 0>
+.decl V0069 v_type=G type=d num_elts=1 align=dword
+.decl V0070 v_type=G type=d num_elts=16 align=hword
+.decl V0071 v_type=G type=d num_elts=16 align=hword
+.decl V0072 v_type=G type=uw num_elts=16 align=hword alias=<V0043, 0>
+.decl V0073 v_type=G type=uw num_elts=16 align=hword alias=<V0044, 0>
+.decl V0074 v_type=G type=d num_elts=16 align=hword
+.decl V0075 v_type=G type=d num_elts=16 align=hword
+.decl V0076 v_type=G type=d num_elts=1 align=dword
+.decl V0077 v_type=G type=d num_elts=16 align=hword
+.decl V0078 v_type=G type=d num_elts=16 align=hword
+.decl V0079 v_type=G type=uw num_elts=16 align=hword alias=<V0041, 0>
+.decl V0080 v_type=G type=uw num_elts=16 align=hword alias=<V0042, 0>
+.decl V0081 v_type=G type=d num_elts=16 align=hword
+.decl V0082 v_type=G type=d num_elts=16 align=hword
+.decl V0083 v_type=G type=ud num_elts=2 align=dword alias=<V0063, 0>
+.decl V0084 v_type=G type=d num_elts=1 align=dword
+.decl V0085 v_type=G type=d num_elts=1 align=dword
+.decl V0086 v_type=G type=d num_elts=1 align=dword
+.decl V0087 v_type=G type=d num_elts=1 align=dword
+.decl V0088 v_type=G type=d num_elts=1 align=dword
+.decl V0089 v_type=G type=d num_elts=1 align=dword
+.decl V0090 v_type=G type=d num_elts=1 align=dword
+.decl V0091 v_type=G type=ud num_elts=1 align=dword alias=<V0085, 0>
+.decl V0092 v_type=G type=d num_elts=1 align=dword
+.decl V0093 v_type=G type=d num_elts=1 align=dword
+.decl V0094 v_type=G type=d num_elts=1 align=dword
+.decl V0095 v_type=G type=ud num_elts=1 align=dword alias=<V0093, 0>
+.decl V0096 v_type=G type=d num_elts=1 align=dword
+.decl V0097 v_type=G type=d num_elts=1 align=dword
+.decl V0098 v_type=G type=d num_elts=1 align=dword
+.decl V0099 v_type=G type=d num_elts=1 align=dword
+.decl V0100 v_type=G type=d num_elts=1 align=dword
+.decl V0101 v_type=G type=d num_elts=1 align=dword
+.decl V0102 v_type=G type=ud num_elts=1 align=dword alias=<V0034, 0>
+.decl V0103 v_type=G type=d num_elts=1 align=dword
+.decl V0104 v_type=G type=ud num_elts=1 align=dword alias=<V0103, 0>
+.decl V0105 v_type=G type=ud num_elts=1 align=dword alias=<V0086, 0>
+.decl V0106 v_type=G type=ud num_elts=8 align=dword
+.decl V0107 v_type=G type=d num_elts=1 align=dword
+.decl V0108 v_type=G type=d num_elts=1 align=dword
+.decl V0109 v_type=G type=d num_elts=1 align=dword
+.decl V0110 v_type=G type=ud num_elts=1 align=dword alias=<V0107, 0>
+.decl V0111 v_type=G type=d num_elts=1 align=dword
+.decl V0112 v_type=G type=d num_elts=1 align=dword
+.decl V0113 v_type=G type=ud num_elts=1 align=dword alias=<V0087, 0>
+.decl V0114 v_type=G type=f num_elts=16 align=hword
+.decl V0115 v_type=G type=f num_elts=16 align=hword
+.decl V0116 v_type=G type=d num_elts=1 align=dword
+.decl V0117 v_type=G type=d num_elts=2 align=qword alias=<V0049, 0>
+.decl V0118 v_type=G type=d num_elts=1 align=dword
+.decl V0119 v_type=G type=d num_elts=2 align=qword alias=<V0055, 0>
+.decl V0120 v_type=G type=d num_elts=1 align=dword
+.decl V0121 v_type=G type=d num_elts=16 align=hword
+.decl V0122 v_type=G type=d num_elts=16 align=hword
+.decl V0123 v_type=G type=d num_elts=16 align=hword
+.decl V0124 v_type=G type=d num_elts=16 align=hword
+.decl V0125 v_type=G type=ud num_elts=16 align=hword alias=<V0123, 0>
+.decl V0126 v_type=G type=ud num_elts=16 align=hword alias=<V0124, 0>
+.decl V0127 v_type=G type=d num_elts=16 align=hword
+.decl V0128 v_type=G type=d num_elts=16 align=hword
+.decl V0129 v_type=G type=ud num_elts=16 align=hword alias=<V0127, 0>
+.decl V0130 v_type=G type=ud num_elts=16 align=hword alias=<V0128, 0>
+.decl V0131 v_type=G type=d num_elts=1 align=dword
+.decl V0132 v_type=G type=d num_elts=1 align=dword
+.decl V0133 v_type=G type=d num_elts=16 align=hword
+.decl V0134 v_type=G type=d num_elts=16 align=hword
+.decl V0135 v_type=G type=d num_elts=16 align=hword
+.decl V0136 v_type=G type=d num_elts=16 align=hword
+.decl V0137 v_type=G type=ud num_elts=16 align=hword alias=<V0135, 0>
+.decl V0138 v_type=G type=ud num_elts=16 align=hword alias=<V0136, 0>
+.decl V0139 v_type=G type=d num_elts=16 align=hword
+.decl V0140 v_type=G type=d num_elts=16 align=hword
+.decl V0141 v_type=G type=d num_elts=16 align=hword
+.decl V0142 v_type=G type=d num_elts=16 align=hword
+.decl V0143 v_type=G type=ud num_elts=16 align=hword alias=<V0141, 0>
+.decl V0144 v_type=G type=ud num_elts=16 align=hword alias=<V0142, 0>
+.decl V0145 v_type=G type=d num_elts=16 align=hword
+.decl V0146 v_type=G type=d num_elts=16 align=hword
+.decl V0147 v_type=G type=d num_elts=1 align=dword
+.decl V0148 v_type=G type=d num_elts=16 align=hword
+.decl V0149 v_type=G type=d num_elts=16 align=hword
+.decl V0150 v_type=G type=ud num_elts=16 align=hword alias=<V0148, 0>
+.decl V0151 v_type=G type=ud num_elts=16 align=hword alias=<V0149, 0>
+.decl V0152 v_type=G type=f num_elts=16 align=hword
+.decl V0153 v_type=G type=f num_elts=16 align=hword
+.decl V0154 v_type=G type=d num_elts=1 align=dword
+.decl V0155 v_type=G type=d num_elts=16 align=hword
+.decl V0156 v_type=G type=d num_elts=16 align=hword
+.decl V0157 v_type=G type=ud num_elts=16 align=hword alias=<V0155, 0>
+.decl V0158 v_type=G type=ud num_elts=16 align=hword alias=<V0156, 0>
+.decl V0159 v_type=G type=f num_elts=16 align=hword
+.decl V0160 v_type=G type=f num_elts=16 align=hword
+.decl V0161 v_type=G type=ud num_elts=1 align=dword alias=<V0147, 0>
+.decl V0162 v_type=G type=d num_elts=16 align=hword
+.decl V0163 v_type=G type=d num_elts=16 align=hword
+.decl V0164 v_type=G type=ud num_elts=16 align=hword alias=<V0162, 0>
+.decl V0165 v_type=G type=ud num_elts=16 align=hword alias=<V0163, 0>
+.decl V0166 v_type=G type=ud num_elts=1 align=dword
+.decl V0167 v_type=G type=uq num_elts=1 align=qword
+.decl V0168 v_type=G type=uq num_elts=1 align=qword
+.decl V0169 v_type=G type=uq num_elts=1 align=qword
+.decl P1 v_type=P num_elts=32
+.decl P2 v_type=P num_elts=32
+.decl P3 v_type=P num_elts=32
+.decl P4 v_type=P num_elts=32
+.decl P5 v_type=P num_elts=32
+.decl P6 v_type=P num_elts=32
+.decl P7 v_type=P num_elts=32
+.decl P8 v_type=P num_elts=32
+.decl P9 v_type=P num_elts=32
+.decl P10 v_type=P num_elts=32
+.decl P11 v_type=P num_elts=32
+.decl P12 v_type=P num_elts=32
+.decl S0 v_type=S num_elts=1 v_name=S000
+.decl T6 v_type=T num_elts=1 v_name=T006
+.input V0041 offset=32 size=32
+.input V0042 offset=64 size=32
+.input V0043 offset=96 size=32
+.input V0044 offset=128 size=32
+.input V0045 offset=160 size=32
+.input V0046 offset=192 size=32
+.input V0040 offset=224 size=32
+.input V0166 offset=256 size=4
+.input V0036 offset=264 size=4
+.input V0167 offset=272 size=8
+.input V0168 offset=280 size=8
+.input V0169 offset=288 size=8
+.input V0034 offset=296 size=4
+.input V0035 offset=304 size=8
+.input V0037 offset=312 size=8
+.input V0048 offset=320 size=8
+.input V0049 offset=328 size=8
+.input V0050 offset=336 size=8
+.input V0051 offset=344 size=8
+.input V0052 offset=352 size=8
+.input V0053 offset=360 size=8
+.input V0054 offset=368 size=8
+.input V0055 offset=376 size=8
+.input V0056 offset=384 size=8
+.input V0057 offset=392 size=8
+.input V0058 offset=400 size=8
+.input V0059 offset=408 size=8
+.input V0047 offset=416 size=8
+.input V0060 offset=424 size=4
+.input V0061 offset=428 size=4
+.input V0062 offset=432 size=4
+.kernel_attr Target="3d"
+.kernel_attr SimdSize=32    
+.function "_main_0"
+
+_main_0:
+    or (M1_NM, 1) %cr0(0,0)<1> %cr0(0,0)<0;1,0> 0x4c0:ud                         /// $1
+    mov (M1_NM, 2) V0063(0,0)<1> V0064(0,0)<2;2,1>                               /// $2
+    mov (M1_NM, 1) V0065(0,0)<1> V0066(0,0)<0;1,0>                               /// $3
+    mov (M1_NM, 1) V0067(0,0)<1> V0068(0,0)<0;1,0>                               /// $4
+    mul (M1_NM, 1) V0069(0,0)<1> V0039(0,6)<0;1,0> V0034(0,0)<0;1,0>             /// $5
+    mov (M1, 16) V0070(0,0)<1> V0072(0,0)<1;1,0>                                 /// $6
+    mov (M5, 16) V0071(0,0)<1> V0073(0,0)<1;1,0>                                 /// $7
+    add (M1, 16) V0074(0,0)<1> V0069(0,0)<0;1,0> V0070(0,0)<1;1,0>               /// $8
+    add (M5, 16) V0075(0,0)<1> V0069(0,0)<0;1,0> V0071(0,0)<1;1,0>               /// $9
+    mul (M1_NM, 1) V0076(0,0)<1> V0039(0,1)<0;1,0> V0034(0,0)<0;1,0>             /// $10
+    mov (M1, 16) V0077(0,0)<1> V0079(0,0)<1;1,0>                                 /// $11
+    mov (M5, 16) V0078(0,0)<1> V0080(0,0)<1;1,0>                                 /// $12
+    add (M1, 16) V0081(0,0)<1> V0076(0,0)<0;1,0> V0077(0,0)<1;1,0>               /// $13
+    add (M5, 16) V0082(0,0)<1> V0076(0,0)<0;1,0> V0078(0,0)<1;1,0>               /// $14
+    cmp.lt (M1_NM, 16) P1 V0083(0,1)<0;1,0> 0x1:ud                               /// $15
+    cmp.lt (M5_NM, 16) P1 V0083(0,1)<0;1,0> 0x1:ud                               /// $16
+    (P1) goto (M1, 32) _0_034                                                    /// $17
+
+_0_035:
+    mov (M1_NM, 1) V0084(0,0)<1> 0x3f:d                                          /// $19
+    mov (M1_NM, 1) V0085(0,0)<1> 0x0:d                                           /// $20
+    mov (M1_NM, 1) V0086(0,0)<1> 0x0:d                                           /// $21
+    mov (M1_NM, 1) V0087(0,0)<1> 0x0:d                                           /// $22
+    mov (M1_NM, 1) V0088(0,0)<1> 0x0:d                                           /// $23
+
+_0_036:
+    shl (M1_NM, 1) V0089(0,0)<1> V0085(0,0)<0;1,0> 0x1:d                         /// $25
+    shr (M1_NM, 1) V0090(0,0)<1> V0091(0,0)<0;1,0> 0x1f:d                        /// $26
+    shl (M1_NM, 1) V0092(0,0)<1> V0086(0,0)<0;1,0> 0x1:d                         /// $27
+    or (M1_NM, 1) V0086(0,0)<1> V0092(0,0)<0;1,0> V0090(0,0)<0;1,0>              /// $28
+    and (M1_NM, 1) V0093(0,0)<1> V0084(0,0)<0;1,0> 0x3f:d                        /// $29
+    cmp.ne (M1_NM, 16) P2 V0093(0,0)<0;1,0> 0x0:d                                /// $30
+    cmp.ne (M5_NM, 16) P2 V0093(0,0)<0;1,0> 0x0:d                                /// $31
+    (P2) goto (M1, 32) _0_037                                                    /// $32
+
+_0_038:
+    mov (M1_NM, 1) V0094(0,0)<1> V0063(0,0)<0;1,0>                               /// $34
+    goto (M1, 1) _0_039                                                          /// $35
+
+_0_037:
+    cmp.lt (M1_NM, 16) P3 V0095(0,0)<0;1,0> 0x20:ud                              /// $37
+    cmp.lt (M5_NM, 16) P3 V0095(0,0)<0;1,0> 0x20:ud                              /// $38
+    (P3) goto (M1, 32) _0_040                                                    /// $39
+
+_0_041:
+    add (M1_NM, 1) V0096(0,0)<1> V0093(0,0)<0;1,0> 0xffffffe0:w                  /// $41
+    shr (M1_NM, 1) V0094(0,0)<1> V0083(0,1)<0;1,0> V0096(0,0)<0;1,0>             /// $42
+    goto (M1, 1) _0_039                                                          /// $43
+
+_0_040:
+    add (M1_NM, 1) V0097(0,0)<1> 0x20:w (-)V0093(0,0)<0;1,0>                     /// $45
+    shl (M1_NM, 1) V0098(0,0)<1> V0063(0,1)<0;1,0> V0097(0,0)<0;1,0>             /// $46
+    shr (M1_NM, 1) V0099(0,0)<1> V0083(0,0)<0;1,0> V0093(0,0)<0;1,0>             /// $47
+    or (M1_NM, 1) V0100(0,0)<1> V0099(0,0)<0;1,0> V0098(0,0)<0;1,0>              /// $48
+    mov (M1_NM, 1) V0094(0,0)<1> V0100(0,0)<0;1,0>                               /// $49
+
+_0_039:
+    and (M1_NM, 1) V0101(0,0)<1> V0094(0,0)<0;1,0> 0x1:d                         /// $51
+    or (M1_NM, 1) V0085(0,0)<1> V0101(0,0)<0;1,0> V0089(0,0)<0;1,0>              /// $52
+    cmp.lt (M1_NM, 16) P4 V0091(0,0)<0;1,0> V0102(0,0)<0;1,0>                    /// $53
+    cmp.lt (M5_NM, 16) P4 V0091(0,0)<0;1,0> V0102(0,0)<0;1,0>                    /// $54
+    cmp.eq (M1_NM, 16) P5 V0086(0,0)<0;1,0> 0x0:d                                /// $55
+    and (M1_NM, 16) P5 P5 P4                                                     /// $56
+    cmp.eq (M5_NM, 16) P5 V0086(0,0)<0;1,0> 0x0:d                                /// $57
+    and (M5_NM, 16) P5 P5 P4                                                     /// $58
+    (P5) goto (M1, 32) _0_042                                                    /// $59
+
+_0_043:
+    subb (M1_NM, 1) V0104(0,0)<1> V0106(0,0)<1> V0091(0,0)<0;1,0> V0102(0,0)<0;1,0> /// $61
+    add (M1_NM, 1) V0105(0,0)<1> V0105(0,0)<0;1,0> 0x0:ud                        /// $62
+    add (M1_NM, 1) V0105(0,0)<1> (-)V0106(0,0)<1;1,0> V0105(0,0)<1;1,0>          /// $63
+    and (M1_NM, 1) V0107(0,0)<1> V0084(0,0)<0;1,0> 0x3f:d                        /// $64
+    cmp.ne (M1_NM, 16) P6 V0107(0,0)<0;1,0> 0x0:d                                /// $65
+    cmp.ne (M5_NM, 16) P6 V0107(0,0)<0;1,0> 0x0:d                                /// $66
+    (P6) goto (M1, 32) _0_044                                                    /// $67
+
+_0_045:
+    mov (M1_NM, 1) V0108(0,0)<1> 0x1:d                                           /// $69
+    mov (M1_NM, 1) V0109(0,0)<1> 0x0:d                                           /// $70
+    goto (M1, 1) _0_046                                                          /// $71
+
+_0_044:
+    cmp.lt (M1_NM, 16) P7 V0110(0,0)<0;1,0> 0x20:ud                              /// $73
+    cmp.lt (M5_NM, 16) P7 V0110(0,0)<0;1,0> 0x20:ud                              /// $74
+    (P7) goto (M1, 32) _0_047                                                    /// $75
+
+_0_048:
+    add (M1_NM, 1) V0111(0,0)<1> V0107(0,0)<0;1,0> 0xffffffe0:w                  /// $77
+    shl (M1_NM, 1) V0109(0,0)<1> 0x1:d V0111(0,0)<0;1,0>                         /// $78
+    mov (M1_NM, 1) V0108(0,0)<1> 0x0:d                                           /// $79
+    goto (M1, 1) _0_046                                                          /// $80
+
+_0_047:
+    shl (M1_NM, 1) V0108(0,0)<1> 0x1:d V0107(0,0)<0;1,0>                         /// $82
+    add (M1_NM, 1) V0112(0,0)<1> 0x20:w (-)V0107(0,0)<0;1,0>                     /// $83
+    shr (M1_NM, 1) V0109(0,0)<1> 0x1:ud V0112(0,0)<0;1,0>                        /// $84
+
+_0_046:
+    or (M1_NM, 1) V0087(0,0)<1> V0108(0,0)<0;1,0> V0087(0,0)<0;1,0>              /// $86
+    or (M1_NM, 1) V0088(0,0)<1> V0109(0,0)<0;1,0> V0088(0,0)<0;1,0>              /// $87
+    mov (M1_NM, 1) V0085(0,0)<1> V0103(0,0)<0;1,0>                               /// $88
+
+_0_042:
+    cmp.eq (M1_NM, 16) P8 V0084(0,0)<0;1,0> 0x0:d                                /// $90
+    cmp.eq (M5_NM, 16) P8 V0084(0,0)<0;1,0> 0x0:d                                /// $91
+    (P8) goto (M1, 32) _0_049                                                    /// $92
+
+_0_050:
+    add (M1_NM, 1) V0084(0,0)<1> V0084(0,0)<0;1,0> 0xffffffff:w                  /// $94
+    goto (M1, 1) _0_036                                                          /// $95
+
+_0_034:
+    div (M1_NM, 1) V0113(0,0)<1> V0083(0,0)<0;1,0> V0102(0,0)<0;1,0>             /// $97
+
+_0_049:
+    cmp.gt (M1_NM, 16) P9 V0087(0,0)<0;1,0> 0x0:d                                /// $99
+    cmp.gt (M5_NM, 16) P9 V0087(0,0)<0;1,0> 0x0:d                                /// $100
+    (P9) goto (M1, 32) _0_051                                                    /// $101
+
+_0_052:
+    mov (M1, 16) V0114(0,0)<1> 0x0:f                                             /// $103
+    mov (M5, 16) V0115(0,0)<1> 0x0:f                                             /// $104
+    goto (M1, 1) _0_053                                                          /// $105
+
+_0_051:
+    mov (M1_NM, 1) V0116(0,0)<1> V0117(0,0)<0;1,0>                               /// $107
+    mov (M1_NM, 1) V0118(0,0)<1> V0119(0,0)<0;1,0>                               /// $108
+    add (M1_NM, 1) V0120(0,0)<1> V0067(0,0)<0;1,0> 0x10000000:d                  /// $109
+    cmp.eq (M1_NM, 16) P10 V0034(0,0)<0;1,0> 0x0:d                               /// $110
+    cmp.eq (M5_NM, 16) P10 V0034(0,0)<0;1,0> 0x0:d                               /// $111
+    mul (M1, 16) V0121(0,0)<1> V0074(0,0)<1;1,0> V0063(0,0)<0;1,0>               /// $112
+    mul (M5, 16) V0122(0,0)<1> V0075(0,0)<1;1,0> V0063(0,0)<0;1,0>               /// $113
+    mad (M1, 16) V0123(0,0)<1> V0116(0,0)<0;1,0> V0070(0,0)<1;1,0> V0077(0,0)<1;1,0> /// $114
+    mad (M5, 16) V0124(0,0)<1> V0116(0,0)<0;1,0> V0071(0,0)<1;1,0> V0078(0,0)<1;1,0> /// $115
+    shl (M1, 16) V0123(0,0)<1> V0123(0,0)<1;1,0> 0x2:d                           /// $116
+    shl (M5, 16) V0124(0,0)<1> V0124(0,0)<1;1,0> 0x2:d                           /// $117
+    add (M1, 16) V0123(0,0)<1> V0123(0,0)<1;1,0> 0x10000000:d                    /// $118
+    add (M5, 16) V0124(0,0)<1> V0124(0,0)<1;1,0> 0x10000000:d                    /// $119
+    mad (M1, 16) V0127(0,0)<1> V0118(0,0)<0;1,0> V0070(0,0)<1;1,0> V0077(0,0)<1;1,0> /// $120
+    mad (M5, 16) V0128(0,0)<1> V0118(0,0)<0;1,0> V0071(0,0)<1;1,0> V0078(0,0)<1;1,0> /// $121
+    shl (M1, 16) V0127(0,0)<1> V0127(0,0)<1;1,0> 0x2:d                           /// $122
+    shl (M5, 16) V0128(0,0)<1> V0128(0,0)<1;1,0> 0x2:d                           /// $123
+    add (M1, 16) V0127(0,0)<1> V0120(0,0)<0;1,0> V0127(0,0)<1;1,0>               /// $124
+    add (M5, 16) V0128(0,0)<1> V0120(0,0)<0;1,0> V0128(0,0)<1;1,0>               /// $125
+    mov (M1, 16) V0114(0,0)<1> 0x0:f                                             /// $126
+    mov (M5, 16) V0115(0,0)<1> 0x0:f                                             /// $127
+    mov (M1_NM, 1) V0131(0,0)<1> 0x0:d                                           /// $128
+
+_0_054:
+    mul (M1_NM, 1) V0132(0,0)<1> V0131(0,0)<0;1,0> V0034(0,0)<0;1,0>             /// $130
+    add (M1, 16) V0133(0,0)<1> V0132(0,0)<0;1,0> V0070(0,0)<1;1,0>               /// $131
+    add (M5, 16) V0134(0,0)<1> V0132(0,0)<0;1,0> V0071(0,0)<1;1,0>               /// $132
+    add (M1, 16) V0135(0,0)<1> V0132(0,0)<0;1,0> V0077(0,0)<1;1,0>               /// $133
+    add (M5, 16) V0136(0,0)<1> V0132(0,0)<0;1,0> V0078(0,0)<1;1,0>               /// $134
+    add (M1, 16) V0135(0,0)<1> V0121(0,0)<1;1,0> V0135(0,0)<1;1,0>               /// $135
+    add (M5, 16) V0136(0,0)<1> V0122(0,0)<1;1,0> V0136(0,0)<1;1,0>               /// $136
+    shl (M1, 16) V0135(0,0)<1> V0135(0,0)<1;1,0> 0x2:d                           /// $137
+    shl (M5, 16) V0136(0,0)<1> V0136(0,0)<1;1,0> 0x2:d                           /// $138
+    add (M1, 16) V0135(0,0)<1> V0135(0,0)<1;1,0> V0060(0,0)<0;1,0>               /// $139
+    add (M5, 16) V0136(0,0)<1> V0136(0,0)<1;1,0> V0060(0,0)<0;1,0>               /// $140
+    movs (M1_NM, 1) T6(0) 0x0:ud                                                 /// $141
+    gather4_scaled.R (M1, 16) T6 0x0:ud V0137.0 V0139.0                          /// $142
+    movs (M1_NM, 1) T6(0) 0x0:ud                                                 /// $143
+    gather4_scaled.R (M5, 16) T6 0x0:ud V0138.0 V0140.0                          /// $144
+    scatter4_scaled.R (M1, 16) %slm 0x0:ud V0125.0 V0139.0                       /// $145
+    scatter4_scaled.R (M5, 16) %slm 0x0:ud V0126.0 V0140.0                       /// $146
+    mul (M1, 16) V0141(0,0)<1> V0133(0,0)<1;1,0> V0065(0,0)<0;1,0>               /// $147
+    mul (M5, 16) V0142(0,0)<1> V0134(0,0)<1;1,0> V0065(0,0)<0;1,0>               /// $148
+    add (M1, 16) V0141(0,0)<1> V0141(0,0)<1;1,0> V0081(0,0)<1;1,0>               /// $149
+    add (M5, 16) V0142(0,0)<1> V0142(0,0)<1;1,0> V0082(0,0)<1;1,0>               /// $150
+    shl (M1, 16) V0141(0,0)<1> V0141(0,0)<1;1,0> 0x2:d                           /// $151
+    shl (M5, 16) V0142(0,0)<1> V0142(0,0)<1;1,0> 0x2:d                           /// $152
+    add (M1, 16) V0141(0,0)<1> V0141(0,0)<1;1,0> V0061(0,0)<0;1,0>               /// $153
+    add (M5, 16) V0142(0,0)<1> V0142(0,0)<1;1,0> V0061(0,0)<0;1,0>               /// $154
+    movs (M1_NM, 1) T6(0) 0x1:ud                                                 /// $155
+    gather4_scaled.R (M1, 16) T6 0x0:ud V0143.0 V0145.0                          /// $156
+    movs (M1_NM, 1) T6(0) 0x1:ud                                                 /// $157
+    gather4_scaled.R (M5, 16) T6 0x0:ud V0144.0 V0146.0                          /// $158
+    scatter4_scaled.R (M1, 16) %slm 0x0:ud V0129.0 V0145.0                       /// $159
+    scatter4_scaled.R (M5, 16) %slm 0x0:ud V0130.0 V0146.0                       /// $160
+    fence_local.E                                                                /// $161
+    barrier                                                                      /// $162
+    (P10) goto (M1, 32) _0_055                                                   /// $163
+
+_0_056:
+    mov (M1_NM, 1) V0147(0,0)<1> 0x0:d                                           /// $165
+
+_0_057:
+    mad (M1, 16) V0148(0,0)<1> V0116(0,0)<0;1,0> V0070(0,0)<1;1,0> V0147(0,0)<0;1,0> /// $167
+    mad (M5, 16) V0149(0,0)<1> V0116(0,0)<0;1,0> V0071(0,0)<1;1,0> V0147(0,0)<0;1,0> /// $168
+    shl (M1, 16) V0148(0,0)<1> V0148(0,0)<1;1,0> 0x2:d                           /// $169
+    shl (M5, 16) V0149(0,0)<1> V0149(0,0)<1;1,0> 0x2:d                           /// $170
+    add (M1, 16) V0148(0,0)<1> V0148(0,0)<1;1,0> 0x10000000:d                    /// $171
+    add (M5, 16) V0149(0,0)<1> V0149(0,0)<1;1,0> 0x10000000:d                    /// $172
+    gather4_scaled.R (M1, 16) %slm 0x0:ud V0150.0 V0152.0                        /// $173
+    gather4_scaled.R (M5, 16) %slm 0x0:ud V0151.0 V0153.0                        /// $174
+    mul (M1_NM, 1) V0154(0,0)<1> V0147(0,0)<0;1,0> V0118(0,0)<0;1,0>             /// $175
+    add (M1, 16) V0155(0,0)<1> V0154(0,0)<0;1,0> V0077(0,0)<1;1,0>               /// $176
+    add (M5, 16) V0156(0,0)<1> V0154(0,0)<0;1,0> V0078(0,0)<1;1,0>               /// $177
+    shl (M1, 16) V0155(0,0)<1> V0155(0,0)<1;1,0> 0x2:d                           /// $178
+    shl (M5, 16) V0156(0,0)<1> V0156(0,0)<1;1,0> 0x2:d                           /// $179
+    add (M1, 16) V0155(0,0)<1> V0120(0,0)<0;1,0> V0155(0,0)<1;1,0>               /// $180
+    add (M5, 16) V0156(0,0)<1> V0120(0,0)<0;1,0> V0156(0,0)<1;1,0>               /// $181
+    gather4_scaled.R (M1, 16) %slm 0x0:ud V0157.0 V0159.0                        /// $182
+    gather4_scaled.R (M5, 16) %slm 0x0:ud V0158.0 V0160.0                        /// $183
+    mad (M1, 16) V0114(0,0)<1> V0159(0,0)<1;1,0> V0152(0,0)<1;1,0> V0114(0,0)<1;1,0> /// $184
+    mad (M5, 16) V0115(0,0)<1> V0160(0,0)<1;1,0> V0153(0,0)<1;1,0> V0115(0,0)<1;1,0> /// $185
+    add (M1_NM, 1) V0147(0,0)<1> V0147(0,0)<0;1,0> 0x1:w                         /// $186
+    cmp.lt (M1_NM, 16) P11 V0161(0,0)<0;1,0> V0102(0,0)<0;1,0>                   /// $187
+    cmp.lt (M5_NM, 16) P11 V0161(0,0)<0;1,0> V0102(0,0)<0;1,0>                   /// $188
+    (P11) goto (M1, 32) _0_057                                                   /// $189
+
+_0_055:
+    fence_local.E                                                                /// $191
+    barrier                                                                      /// $192
+    add (M1_NM, 1) V0131(0,0)<1> V0131(0,0)<0;1,0> 0x1:w                         /// $193
+    cmp.lt (M1_NM, 16) P12 V0131(0,0)<0;1,0> V0087(0,0)<0;1,0>                   /// $194
+    cmp.lt (M5_NM, 16) P12 V0131(0,0)<0;1,0> V0087(0,0)<0;1,0>                   /// $195
+    (P12) goto (M1, 32) _0_054                                                   /// $196
+
+_0_053:
+    mul (M1, 16) V0162(0,0)<1> V0074(0,0)<1;1,0> V0065(0,0)<0;1,0>               /// $198
+    mul (M5, 16) V0163(0,0)<1> V0075(0,0)<1;1,0> V0065(0,0)<0;1,0>               /// $199
+    add (M1, 16) V0162(0,0)<1> V0162(0,0)<1;1,0> V0081(0,0)<1;1,0>               /// $200
+    add (M5, 16) V0163(0,0)<1> V0163(0,0)<1;1,0> V0082(0,0)<1;1,0>               /// $201
+    shl (M1, 16) V0162(0,0)<1> V0162(0,0)<1;1,0> 0x2:d                           /// $202
+    shl (M5, 16) V0163(0,0)<1> V0163(0,0)<1;1,0> 0x2:d                           /// $203
+    add (M1, 16) V0162(0,0)<1> V0162(0,0)<1;1,0> V0062(0,0)<0;1,0>               /// $204
+    add (M5, 16) V0163(0,0)<1> V0163(0,0)<1;1,0> V0062(0,0)<0;1,0>               /// $205
+    movs (M1_NM, 1) T6(0) 0x2:ud                                                 /// $206
+    scatter4_scaled.R (M1, 16) T6 0x0:ud V0164.0 V0114.0                         /// $207
+    movs (M1_NM, 1) T6(0) 0x2:ud                                                 /// $208
+    scatter4_scaled.R (M5, 16) T6 0x0:ud V0165.0 V0115.0                         /// $209
+    ret (M1, 1)                                                                  /// $210

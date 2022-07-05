@@ -40,6 +40,7 @@ public:
     sycltesters::EvtVec_t ProfInfo;
     sycl::range<2> Asz{AX, AY}, Bsz{AY, BY}, Csz{AX, BY};
     auto &DeviceQueue = Queue();
+    int X = 1;
 
 #ifdef SHARED
     auto *A = sycl::malloc_shared<T>(AX * AY, DeviceQueue);
@@ -69,8 +70,8 @@ public:
 
         T Sum = 0;
         for (int K = 0; K < AY; K++)
-          Sum += A[Row * AY + K] * B[K * BY + Col];
-        C[Row * BY + Col] = Sum;
+          Sum += A[X * Row * AY + K] * B[K * BY + X * Col];
+        C[Row * BY + X * Col] = Sum;
       };
 
       Cgh.parallel_for<class mmult_naive_shared<T>>(Csz, Kernmul);

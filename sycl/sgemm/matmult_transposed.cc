@@ -2,9 +2,6 @@
 //
 // Matrix multiplication with simple kernel (SYCL vs serial CPU)
 //
-// Macros to control things:
-// -DNONTRANSPOSED -- switch off transposition
-//
 //------------------------------------------------------------------------------
 //
 // This file is licensed after LGPL v3
@@ -46,13 +43,10 @@ public:
     auto *B = sycl::malloc_shared<T>(AY * BY, DeviceQueue);
     auto *C = sycl::malloc_shared<T>(AX * BY, DeviceQueue);
     std::copy(Aptr, Aptr + AX * AY, A);
-#ifndef NONTRANSPOSED
+    // transpose matrix B
     for (int i = 0; i < AY; ++i)
       for (int j = 0; j < BY; ++j)
         B[j * AY + i] = Bptr[i * BY + j];
-#else
-    std::copy(Bptr, Bptr + AY * BY, B);
-#endif
     std::fill(Cptr, Cptr + AX * BY, 0);
 
     auto Evt = DeviceQueue.submit([&](sycl::handler &Cgh) {
@@ -60,13 +54,9 @@ public:
         const int Row = WorkItem.get(0);
         const int Col = WorkItem.get(1);
         T Sum = 0;
-#ifndef NONTRANSPOSED
+        // iterate the same K dimension
         for (int K = 0; K < AY; K++)
           Sum += A[Row * AY + K] * B[Col * AY + K];
-#else
-        for (int K = 0; K < AY; K++)
-          Sum += A[Row * AY + K] * B[K * BY + Col];
-#endif
         C[Row * BY + Col] = Sum;
       };
 
@@ -79,7 +69,6 @@ public:
     sycl::free(A, DeviceQueue);
     sycl::free(B, DeviceQueue);
     sycl::free(C, DeviceQueue);
-
     return ProfInfo;
   }
 };

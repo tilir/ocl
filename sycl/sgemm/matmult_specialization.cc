@@ -22,7 +22,7 @@
 template <typename T> class mmult_specialized_buf;
 
 // specialization constant for AY
-const static sycl::specialization_id<int> AYC;
+constexpr sycl::specialization_id<int> AYC(256);
 
 using ConfigTy = sycltesters::sgemm::Config;
 

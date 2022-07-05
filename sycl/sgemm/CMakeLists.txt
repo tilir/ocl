@@ -21,7 +21,6 @@ endforeach()
 
 # special targets with defines
 buildv(matmult_nopriv matmult.cc "NOPRIVATE=1")
-buildv(matmult_notrans matmult_transposed.cc "NONTRANSPOSED=1")
 buildv(matmult_shared matmult_device.cc "SHARED=1")
 buildv(matmult_usm matmult_system.cc "USM_ALLOC=1")
 # excluded from testing
@@ -40,7 +39,6 @@ set(TESTING
   matmult_shared
   matmult_usm
   matmult_transposed
-  matmult_notrans
   matmult_specialization
   matmult_specialization_svm
   matmult_local

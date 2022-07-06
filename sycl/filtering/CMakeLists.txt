@@ -6,6 +6,8 @@ set(KERNELS
   filtering_sampler_local
   filtering_buffer_local
   filtering_sampler_local_spec
+# exclude from testing 
+  filtering_buffer_local_hang
 )
 
 # build kernels

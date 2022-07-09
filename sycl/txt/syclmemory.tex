@@ -24,6 +24,9 @@ citecolor=black,           % color of links to bibliography
     urlcolor=blue             % color of external links
 }
 
+%\begin{lstlisting}[caption={},label={lst:}]
+%\end{lstlisting}
+
 \definecolor{olivegreen}{cmyk}{0.64,0,0.95,0.40}
 \definecolor{mauve}{rgb}{0.58,0,0.82}
 
@@ -273,9 +276,138 @@ void main() {
 
 \subsection{API с раздельным исходным кодом: OpenCL}\label{subsec:opencl}
 
+Появившийся в 2009-м году стандарт OpenCL (сравните с 1992-м годом OpenGL) ознаменовал начало эры программирования General Purpose GPU (или GPGPU), из которого потом вырос целый мир гетерогенного программирования.
+Строго говоря, CUDA появилась в 2007-м, что несколько раньше, но, вспомним, что автор питает сильное пристрастие к открытым API, а CUDA сильно залочена на NVidia и имеет ряд других особенностей о которых ниже.
+Будучи первым открытым compute API, OpenCL, разумеется, был сделан со всеми оглядками на существующие графические API, то есть separate-source. В общем и немудрено: семнадцать лет развития графики давали неплохую инерцию мышления.
+
+Единицей работы с памятью в OpenCL является \textbf{буфер}.
+Хостовая программа запрашивает у рантайма OpenCL создание буфера либо через явный вызов API, такой как clCreateBuffer, либо в более совершенном C++ API просто в конструкторе reference-counted RAII объекта.
+Точно так же для пересылки есть явные API вроде clEnqueueReadBuffer, но, разумеется, лучше когда их просто вызывает под капотом алгоритм \lstinline!cl::copy!, как это показано на (lst. \ref{lst:oclbuf}).
+
+\begin{lstlisting}[caption={Пересылка буфера, OpenCL},label={lst:oclbuf}]
+cl::vector<int> A(BUFSZ), B(BUFSZ);
+cl::Context Context{CL_DEVICE_TYPE_GPU, properties};
+cl::CommandQueue Queue{Context};
+
+// Буфер D на устройстве
+cl::Buffer D{Context, CL_MEM_READ_WRITE, BUFSZ * sizeof(int)};
+
+// Пересылка A → D
+cl::copy(Queue, A.begin(), A.end(), D);
+
+// Пересылка D → B
+cl::copy(Queue, D, B.begin(), B.end());
+\end{lstlisting}
+
+С одной стороны буфер как идея напоминает нам BTI из графики. С другой стороны, простая программа на OpenCL C, которая работает с буферами, оперирует в качестве своих аргументов аннотированными указателями, как это показано на (lst. \ref{lst:oclvadd}).
+
+\begin{lstlisting}[caption={Векторное сложение, OpenCL},label={lst:oclvadd}]
+__kernel void
+vector_add(__global int *A, __global int *B, __global int *C) {
+  int i = get_global_id(0);
+  C[i] = A[i] + B[i];
+}
+\end{lstlisting}
+
+С точки зрения кода на C++ это просто текст и создание из него функтора происходит в рантайме.
+Опять-таки можно использовать низкоуровневые вызовы clBuildProgram и т.п., можно проделать это более человечно в конструкторе RAII-объекта, как показано на (lst. \ref{lst:oclkern}).
+
+\begin{lstlisting}[caption={Создание кернела, OpenCL},label={lst:oclkern}]
+cl::Context Context{CL_DEVICE_TYPE_GPU, prop};
+cl::CommandQueue Queue{Context};
+
+// true == build immediately
+cl::Program program{Context, vakernel, true};
+
+cl::NDRange GlobalRange{Sz};
+cl::EnqueueArgs Args{Queue, GlobalRange};
+using KernTy = cl::KernelFunctor<cl::Buffer, cl::Buffer, cl::Buffer>;
+KernTy add_vecs{program, "vector_add"};
+
+// enque, execute, wait
+cl::Event evt = add_vecs(Args, A, B, C);
+\end{lstlisting}
+
+На (рис. \ref{fig:oclkern}) показана схема того, что происходит с текстом программы когда он попадает в жернова рантайма и графического компилятора.
+Программа обрабатывается фронтендом (часто clang-based) до стабильного промежуточного представления (стандарт де-факто это SPIRV, но могут быть варианты).
+Далее подключается оптимизатор, который делает из бинарника в стабильном промежуточном представлении бинарник для конкретного устройства на котором исполняется программа.
+
+\begin{figure}
+\centering
+\includegraphics[width=0.5\textwidth]{pictures/ocl-compilation-scheme.pdf}
+\caption{Схема компиляции для (lst. \ref{lst:oclkern})}
+\label{fig:oclkern}
+\end{figure}
+
+Разумеется не обязательно подавать текстовый файл и проходить все эти этапы.
+OpenCL API позволяет вызывать и CreateProgramFromText и CreateProgramFromIL и даже CreateProgramFromBinary.
+В последнем случае речь идёт об Ahead Of Time (AOT) компиляции, в первых двух случаях о разных версиях Just in Time (JIT) компиляции.
+В случае AOT компиляции вы должны быть уверены что платформа и версия бинарного файла совпадут с вашим вычислительным устройством.
+
 \subsection{API с совместным исходным кодом}\label{subsec:typesafety}
 
-Далее для всех примеров мы будем использовать SYCL, являющийся API с совместным исходным кодом
+У API с раздельным исходным кодом есть фундаментальная проблема для вычислительных задач.
+Поскольку они напрямую взаимодействуют с хостом (по сути они притворяются функциями, вызываемыми с хоста) у них есть границы интерфейсов.
+
+Но хост не может проконтролировать безопасность типов по этим границам. Пример (lst. \ref{lst:oclvadd}) с точки зрения хостового кода выглядит как показано на (lst. \ref{lst:oclvaddhost}) то есть довольно-таки безнадёжно.
+
+\begin{lstlisting}[caption={Векторное сложение, OpenCL c точки зрения хоста},label={lst:oclvaddhost}]
+const char *vakernel = "__kernel void vector_add("
+" __global int *A, __global int *B, __global int *C) {"
+" int i = get_global_id(0);"
+" C[i] = A[i] + B[i];"
+"}";
+\end{lstlisting}
+
+\textbf{Обсуждение:} чему равен sizeof(int) на вашей графической карте и сколько вы будете отлаживать ошибку, если он не совпадёт с хостовым?
+
+Разумеется есть много ухищрений на которые тут можно пойти, например использовать всюду \lstinline!cl_int!, для которого совпадение размеров гарантированно.
+Но давайте будем честны: если у вас есть массив структур из двух int, вы вряд ли будете перекладывать его в массив структур из двух \lstinline!cl_int!.
+Скорее уж вы будете надеяться что всё будет работать, у вас же на машине работает.
+А даже если и переложите, то всё равно вам останется только молиться, чтобы совпало выравнивание.
+
+Человечество осознало эту проблему довольно рано и первым single-source API стала CUDA в 2007-м году. После CUDA появился SYCL в 2014-м, и возможность оффлоада на гетерогенные устройства была добавлена в стандарт OpenMP.
+
+Основной проблемой для single-source API является то, что обычный C++ не подходит для выражения ряда важных концепций. В нём нет разных типов памяти, нет интерфейсов для оффлоада и многого другого. Итак, что же можно сделать, чтобы решить эту проблему?
+
+\textbf{Первый вариант:} расширить C++ новыми ключевыми словами и синтаксическими элементами. 
+
+\begin{lstlisting}[caption={Векторное сложение, CUDA},label={lst:cudavadd}]
+__global__ void vecAdd(int *A, int *B, int *C, int N);
+....
+cudaMalloc((void **)&a_d, n * sizeof(int));
+cudaMalloc((void **)&b_d, n * sizeof(int));
+cudaMalloc((void **)&c_d, n * sizeof(int));
+vecAdd<<<block_no, block_size>>>(a_d, b_d, c_d, n);
+\end{lstlisting}
+
+\textbf{Второй вариант:} расширить C++ новыми прагмами. 
+
+\begin{lstlisting}[caption={Редукция, OpenMP},label={lst:ompred}]
+#pragma omp target parallel private(ompSum) shared(totalSum)
+{
+  ompSum = 0;
+
+  #pragma omp for
+  for (int i = 0; i < N; i++)
+    ompSum += array[i];
+
+  #pragma omp critical
+  totalSum += ompSum;
+}
+\end{lstlisting}
+
+\textbf{Третий вариант:} не трогать C++, обойтись библиотечной поддержкой.
+
+\begin{lstlisting}[caption={Выполнение DeviceFn, SYCL},label={lst:syclfn}]
+auto Event = Queue.submit(
+  [&](sycl::handler &Cgh) {
+    // .....
+    Cgh.parallel_for<name>(Range, DeviceFn);
+  });
+\end{lstlisting}
+
+Далее для всех примеров будет использоваться SYCL.
 
 % \section{Пять главных задач на SYCL}\label{sec:FiveTasks}
 % \subsection{Перемножение матриц}\label{subsec:gemm}

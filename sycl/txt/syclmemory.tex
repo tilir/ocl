@@ -1,17 +1,15 @@
 \documentclass[a4paper,12pt,oneside]{article}
 
 \usepackage[utf8]{inputenc}
-\usepackage[english]{babel}
+\usepackage[T1,T2A]{fontenc}
+\usepackage[english,russian]{babel}
 \usepackage[usenames]{xcolor}
-\usepackage{etoolbox}
 \usepackage{listings}
 \usepackage{graphicx}
+\usepackage{cmap}
 \usepackage{indentfirst}
-\usepackage{makeidx}
 \usepackage{imakeidx}
 \usepackage[unicode]{hyperref}
-\usepackage{cmap}
-\usepackage[T2A]{fontenc}
 
 \hypersetup{
 %bookmarks=true,            % show bookmarks bar?
@@ -23,7 +21,7 @@ colorlinks=true,           % false: boxed links; true: colored links
 linkcolor=black,           % color of internal links
 citecolor=black,           % color of links to bibliography
     filecolor=black,           % color of file links
-    urlcolor=black             % color of external links
+    urlcolor=blue             % color of external links
 }
 
 \definecolor{olivegreen}{cmyk}{0.64,0,0.95,0.40}
@@ -65,6 +63,30 @@ inputencoding=utf8,
 
 \begin{document}
 
+\begin{titlepage}
+\begin{center}
+
+\large ~ \\[4.5cm]
+
+\huge Память как концепция\\[0.6cm]
+\large В гетерогенных системах\\[3.7cm]
+
+\begin{minipage}{0.5\textwidth}
+\begin{flushleft}
+\emph{Автор:} Владимиров К. И.\\
+\end{flushleft}
+\end{minipage}
+\vfill
+Email автора: \texttt{konstantin.vladimirov@gmail.com}\\
+{\large \today}
+{\large \LaTeX}
+
+\end{center}
+\thispagestyle{empty}
+\end{titlepage}
+
+\tableofcontents
+
 \section{Введение}\label{sec:Intro}
 
 Гетерогенными системами мы называем системы, имеющие две выделенных роли: host и device. Host это устройство, которое иницирует вычисления и обрабатывает их результаты, device это устройство, на котором производятся вычисления.
@@ -91,7 +113,177 @@ inputencoding=utf8,
 Ниже везде использование терминов шейдер, кернел и программа будет полностью взаимозаменяемым.
 В общем нет ошибки в том, чтобы назвать чисто вычислительную программу шейдером и так далее.
 
+\pagebreak
 \section{Структура памяти для графики}\label{sec:GPUMEM}
 
+Основные концепции в программировании графики примерно одинаковые но по разному называются для разных API. Ниже будут использоваться в основном термины из OpenGL и Vulkan -- из-за существенной тяги автора к открытым API. 
+
+Важнейшей концепцией в программировании графики является память обладающая состоянием (stateful memory) и её разновидность: память с общей точкой привязки (bindless memory). 
+Несмотря на то, что в языках, ориентированных на вычисления, таких концепций как будто нет, их понимание даёт важные инсайты для того чтобы далее понимать модель памяти, ракладку памяти и даже сгенерированный ассемблер.
+
+\subsection{Память, обладающая состоянием}\label{subsec:stateful}
+
+Ключевые типы памяти это uniform buffer object (UBO) и shared storage buffer object (SSBO). Простое объявление и того и другого проиллюстрировано на (lst. \ref{lst:glslbti}).
+
+\begin{lstlisting}[caption={Простая программа на GLSL с явными binding индексами},label={lst:glslbti}]
+struct Particle {
+  vec4 pos, vel;
+};
+
+layout(std140, binding = 0) buffer Pos {
+  Particle particles[];
+};
+
+layout (binding = 1) uniform UBO {
+  float deltaT; 
+  int count;
+} ubo;
+\end{lstlisting}
+
+Следует обратить внимание на явное указание binding point для буфера. Обычно в GPU есть поддержка в железе для быстрого преобразования binding table index (BTI) и смещения в буфере в физический адрес. В данном случае программист вручную назначил точку с номером ноль для SSBO, а точку с номером один для UBO как показано на (рис. \ref{fig:bti-idea}).
+
+\begin{figure}
+\centering
+\includegraphics[width=0.5\textwidth]{pictures/bti-idea.pdf}
+\caption{Binding table для (lst. \ref{lst:glslbti})}
+\label{fig:bti-idea}
+\end{figure}
+
+После того как точки привязки назначены, работа с ними ведётся как с обычными массивами, структурами и даже массивами структур (lst. \ref{lst:glslprog}).
+
+\begin{lstlisting}[caption={Работа с UBO и SSBO на GLSL},label={lst:glslprog}]
+for (int i = 0; i < ubo.count; i += DataSz)
+  if (i + x < ubo.count)
+    someData[x] = particles[i + x].pos;
+\end{lstlisting}
+
+Но надо очень чётко осознавать: несмотря на то, что адресация \lstinline!particles[i + x]! выглядит похоже на работу с указателями в обычном C или C++, на самом деле это совсем другая концепция. Тут явно указывается буффер с его BTI и смещение в нём. Чтобы понять чем это отличается от настоящих указателей, давайте рассмотрим пример (lst. \ref{lst:glslbad})
+
+\begin{lstlisting}[caption={Отсутствие настоящих указателей в GLSL},label={lst:glslbad}]
+int *uboPtr = &ubo.deltaT; // так сделать нельзя
+int *ssboPtr = &particles[i + x].pos; // и так тоже
+int *somePtr = CTUnknownCondition() ? ssboPtr : uboPtr;
+\end{lstlisting}
+
+Так делать в GLSL нельзя именно потому что наличие указателя как концепции позволяет смешать указатели в выражении, а это потеряет в \lstinline!someptr! информацию о том какой у него номер буфера и какой оффсет в нём.
+В итоге компилятор будет просто не в состоянии построить ассемблер для выражения вроде \lstinline!*someptr = 8! так как останется неясно куда записывать восьмёрку.
+
+Такая память, в которой обращение идёт опосредовано -- через BTI и смещение -- называется обладающей состоянием или stateful.
+У вас есть незримое состояние: для каждого индекса BTI есть реальный физический адрес куда отображена память и размер буфера по этому адресу, а иногда и нечто другое.
+Работа со stateful памятью за счёт аппаратной поддержки может быть очень эффективна, но фактически сырые (то есть stateless) указатели в такой модели оказываются запрещены: они позволяют слишком много.
+
+\textbf{Обсуждение:} как вы думаете что делает stateful указатели более эффективными?
+При ответе подумайте над размером stateless указателя в 64-битном адресном пространстве, над отсутствием поддержки 64-битной арифметики во многих видеокартах и над тем насколько эффективней заменить работу с 64-разрядными указателями на работу с 32-разрядными смещениями.
+
+\textbf{Упражнение:} в этом подразделе использован известный пример N-body из
+\href{https://github.com/SaschaWillems/Vulkan/blob/master/data/shaders/glsl/computenbody/particle_calculate.comp}{примеров Виллемса для Vulkan API}. Попробуйте скомпилировать его графическим компилятором вашего вендора графики и посмотрите получившийся ассемблер для вашей видеокарточки.
+
+\subsection{Типизированная память}\label{subsec:typedmem}
+
+Многие графические API работают со специальными объектами: изображениями и самплерами. Например (lst. \ref{lst:glslsamplers}) демонстрирует как выход растеризатора смешивается с текстурой и используется для получения итогового цвета фрагмента.
+
+\begin{lstlisting}[caption={Работа с typed памятью},label={lst:glslsamplers}]
+layout (binding = 0) uniform sampler2D samplerposition;
+
+layout (location = 0) in vec2 inUV;
+layout (location = 0) out vec4 outFragColor;
+
+void main() {
+  vec3 fragPos = texture(samplerposition, inUV).rgb;
+  vec3 lightPos = vec3(0.0);
+  vec3 L = normalize(lightPos - fragPos);
+  float NdotL = max(0.5, dot(normal, L));
+  outFragColor.rgb = NdotL;
+}
+\end{lstlisting}
+
+Самое интересное тут это структура памяти текстуры. Очевидно это stateful память, но её state несколько сложнее.
+Будучи изображением, текстура хранит свои внутренности в сложном формате, включающем размеры, pitch, цветовую схему.
+Самплер как раз призван изолировать нас от этих деталей (а заодно сообщить железу как обрабатывать выходы за пределы текстуры и т.п. чтобы программист не писал этих условий руками).
+Такая память, которая скрывает от нас сложные детали каждой своей ячейки, то есть имеет определенный тип ячейки, который мы снаружи видим как вектор, называется типизированной или \textbf{typed} памятью.
+
+\subsection{Память с единой точкой привязки}\label{subsec:bindless}
+
+Всего точек привязки обычно немного, что-то вроде 255 причём нижние две зарезервированы (например 254 это локальная память и 255 это \textbf{scratch} -- специальная память куда идут выгрузки данных не вместившихся в регистры).
+При этом доступных дескрипторов для буферов в Vulkan API могут быть миллионы.
+
+Ещё одна проблема в том, что мы не можем хранить массив текстур, так как обращение по оффсету может быть только в пределах одной точки привязки.
+
+Из-за этого в программировании графики возникает концепция памяти с единой точки привязки (bindless memory), доступной, например в GLSL через расширение \lstinline!GL_EXT_nonuniform_qualifier!.
+
+\begin{lstlisting}[caption={Работа с bindless памятью на GLSL},label={lst:bindless}]
+#extension GL_EXT_nonuniform_qualifier : enable
+layout (set = 1, binding = 10) uniform sampler2D textures[];
+// ....
+vec4 color = texture(textures[albedo_id], final_uv.xy);
+\end{lstlisting}
+
+Здесь \lstinline!albedo_id! может быть неизвестен на этапе компиляции, но это не так важно: весь массив, как показано на (рис. \ref{fig:bti-idea}) привязан к одной точке привязки и далее в пределах массива возможна индексация.
+Эта концепция несколько приближает смещение в таком массиве к настоящему указателю, а сам массив -- к специальному адресному пространству к которому этот указатель принадлежит.
+
+\begin{figure}
+\centering
+\includegraphics[width=0.5\textwidth]{pictures/bindless-idea.pdf}
+\caption{Концепция bindless памяти для (lst. \ref{lst:bindless})}
+\label{fig:bindless-idea}
+\end{figure}
+
+Главная претензия к отсутствию настоящих указателей: невозможность просто на оффсетах и буферах делать удобные дианмические структуры данных.
+Конечно можно представить дерево или даже граф закодированные как линейный массив, но вряд ли операции над таким представлением будут сохранять асимптотическую эффективность.
+
+\subsection{Конвергенция 3D: device pointers}\label{subsec:devpointers}
+
+Графика постоянно приближается по мощности работы с памятью к вычислительным языкам, свидетельством чему является появившееся недавно расширение \lstinline!GLSL_EXT_buffer_reference!, работа с которым показана на (lst. \ref{lst:devptrs}).
+
+\begin{lstlisting}[caption={Работа с device pointers на GLSL},label={lst:devptrs}]
+// forward declaration
+layout(buffer_reference) buffer blockType;
+
+layout(buffer_reference, std430, buffer_reference_align = 16) 
+buffer blockType {
+  int x;
+  blockType next;
+};
+
+layout(std430) buffer rootBlock {
+  blockType root;
+} r;
+
+void main() {
+  blockType b = r.root;
+  // "pointer chasing" through a linked list
+  b = b.next.next.next.next.next;
+}
+\end{lstlisting}
+
+Тем не менее, даже такое совершенное приближение к концепции указателя не даёт ответа на фундаментальный вопрос: как быть с отображением указателей? 
+Допустим мы находимся в мире гетерогенного программирования и у нас есть хост, который подготовил дерево, связный список или граф и куча устройств, которые готовы с этой структурой данных работать.
+Может ли мы прозрачно, указатель в указатель, отобразить эту структуру данных на устройство, не переделывая указатели в узлах?
+То есть, шире говоря, можем ли мы работать с памятью хоста и памятью одного или нескольких устройств как с унифицированной виртуальной памятью?
+
+\pagebreak
+\section{Вычислительные API}\label{sec:SingleSource}
+
+Первые вычислительные API были разновидностью API для графики и до сих пор и OpenGL compute и Vulkan compute отлично существуют.
+Их применимость ограничена странной моделью памяти.
+Кроме того они по уважительным причинам имеют чёткую границу между кодом для устройства и кодом для хоста.
+Вы пишете хостовую программу и для неё код вашего шейдера это не код это кусок текста.
+Это выглядит неплохо для графики, где шейдер не особо общается с хостовым кодом, а зависит в основном от выхода таких слабо контролируемых программистом устройств как сборщик геометрии или растеризатор.
+В этом разделе мы посмотрим на проблемы API с раздельным кодом для вычислительных задач и после краткого обзора API с общим исходным кодом, остановимся на одном из них.
+
+\subsection{API с раздельным исходным кодом: OpenCL}\label{subsec:opencl}
+
+\subsection{API с совместным исходным кодом}\label{subsec:typesafety}
+
+Далее для всех примеров мы будем использовать SYCL, являющийся API с совместным исходным кодом
+
+% \section{Пять главных задач на SYCL}\label{sec:FiveTasks}
+% \subsection{Перемножение матриц}\label{subsec:gemm}
+% \subsection{}\label{subsec:}
+% \subsection{}\label{subsec:}
+% \subsection{}\label{subsec:}
+% \subsection{}\label{subsec:}
+
+% \section{Атомарность в SYCL и в C++}\label{sec:Atomicity}
 
 \end{document}

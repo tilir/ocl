@@ -10,6 +10,7 @@
 // -imw=<width>
 // -imh=<height>
 // -randboxes : random boxes image imw x imh
+// -randpoints : random points image imw x imh
 // -img=<path> : starting image from file
 // if boxes/image not specified, start with imw x imh with
 // single black dot in the center
@@ -83,11 +84,18 @@ constexpr int NBOXES = 30;
 // fast-forward iteration number
 constexpr int FF_ITER_COUNT = 300;
 
+enum class Starting {
+  SINGLEDOT,
+  DOTS,
+  BOXES,
+  IMAGE
+};
+
 struct Config {
-  bool SingleDot, RandBoxes, RandMachine, Detailed, Visualize, Quiet,
-      LocOverflow = false;
+  bool RandMachine, Detailed, Visualize, Quiet, LocOverflow = false;
   int LocSz, ImW, ImH;
   std::string BoolMachinePath, ImagePath;
+  Starting InitType;
 };
 
 inline Config read_config(int argc, char **argv) {
@@ -95,8 +103,7 @@ inline Config read_config(int argc, char **argv) {
   options::Parser OptParser;
   OptParser.template add<int>("imw", DEF_IMW, "image width");
   OptParser.template add<int>("imh", DEF_IMH, "image height");
-  OptParser.template add<int>("randboxes", DEF_RB, "random boxes image");
-  OptParser.template add<std::string>("img", "", "image to apply machine");
+  OptParser.template add<std::string>("img", "", "image file to apply machine or (randboxes | dots | singledot)");
 
   OptParser.template add<std::string>("machine", "", "boolmachine to apply");
   OptParser.template add<int>("randmachine", DEF_BM,
@@ -108,11 +115,17 @@ inline Config read_config(int argc, char **argv) {
   OptParser.template add<int>("quiet", DEF_QUIET, "quiet mode for bulk runs");
   OptParser.parse(argc, argv);
 
-  Cfg.RandBoxes = OptParser.exists("randboxes");
   Cfg.ImW = OptParser.template get<int>("imw");
   Cfg.ImH = OptParser.template get<int>("imh");
   Cfg.ImagePath = OptParser.template get<std::string>("img");
-  Cfg.SingleDot = !OptParser.exists("randboxes") && Cfg.ImagePath.empty();
+
+  Cfg.InitType = Starting::IMAGE;
+  if (Cfg.ImagePath == "randboxes" || Cfg.ImagePath == "boxes")
+    Cfg.InitType = Starting::BOXES;
+  if (Cfg.ImagePath == "dots")
+    Cfg.InitType = Starting::DOTS;
+  if (Cfg.ImagePath == "singledot")
+    Cfg.InitType = Starting::SINGLEDOT;
 
   Cfg.BoolMachinePath = OptParser.template get<std::string>("machine");
   Cfg.RandMachine =
@@ -227,13 +240,13 @@ inline BoolMachineTy init_boolmachine(boolmachine::Config Cfg) {
 }
 
 inline ImageTy init_image(boolmachine::Config Cfg) {
-  if (!Cfg.ImagePath.empty()) {
+  if (Cfg.InitType == Starting::IMAGE) {
     qout << "Initializing with image: " << Cfg.ImagePath << "\n";
     ImageTy Image(Cfg.ImagePath.c_str());
     return Image;
   }
 
-  if (Cfg.RandBoxes) {
+  if (Cfg.InitType == Starting::BOXES) {
     qout << "Generating Image with random boxes\n";
     ImageTy Image(Cfg.ImW, Cfg.ImH, 1, 1, 255);
 
@@ -242,11 +255,23 @@ inline ImageTy init_image(boolmachine::Config Cfg) {
     return Image;
   }
 
-  if (Cfg.SingleDot) {
+  if (Cfg.InitType == Starting::SINGLEDOT) {
     qout << "Generating Image with single central dot\n";
     ImageTy Image(Cfg.ImW, Cfg.ImH, 1, 1, 255);
     unsigned char color[1] = {0};
     Image.draw_point(Cfg.ImW / 2, Cfg.ImH / 2, color);
+    return Image;
+  }
+
+  if (Cfg.InitType == Starting::DOTS) {
+    qout << "For each dot make it uniformly black or white\n";
+    ImageTy Image(Cfg.ImW, Cfg.ImH, 1, 1, 255);
+    unsigned char color[1] = {0};
+    sycltesters::Dice D(0, 1);
+    for (int W = 0; W < Cfg.ImW; ++W)
+      for (int H = 0; H < Cfg.ImH; ++H)
+        if (D())
+          Image.draw_point(W, H, color);
     return Image;
   }
 

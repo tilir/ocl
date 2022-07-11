@@ -123,13 +123,13 @@ Email автора: \texttt{konstantin.vladimirov@gmail.com}\\
 
 \subsection{О чём пойдёт речь далее}\label{subsec:about}
 
-Структурно всё изложение ниже ведёт к глубокому анализу памяти и работы с ней в SYCL (см. раздел \ref{sec:FiveTasks}).
+Структурно всё изложение ниже ведёт к глубокому анализу памяти и работы с ней в распространённых задачах гетерогенного программирования (см. раздел \ref{sec:FiveTasks}). Подготовленный читатель может сразу начать оттуда, но рекомендуется хотя бы ознакомиться с (\ref{subsec:memsend}) чтобы освежить варианты работы с памятью в SYCL.
 
-По пути будут изложены основы памяти для графических API (см. \ref{sec:GPUMEM})., мотивировано использование single-source API для compute (см. \ref{sec:SingleSource}) и дан краткий обзор компиляции и ассемблера для Intel XE (см. \ref{sec:IntelXE}).
+На пути к этому будут изложены основы памяти для графических API (см. \ref{sec:GPUMEM}), мотивировано использование single-source API для compute (см. \ref{sec:SingleSource}) и дан краткий обзор компиляции и ассемблера для Intel XE (см. \ref{sec:IntelXE}).
 Всё это должно помочь понять и воспроизвести соответствующие замеры, в том числе и на доступном читателю железе.
 Даже не обязательно на железе Intel XE, так как общие концепции везде одинаковы.
 
-Технический интерес может также представлять изложений концепций атомарности в мире обычного и гетерогенного программирования, к которому изложение придёт в конце, поскольку эти вопросы несколько сложны.
+Технический интерес могут также представлять концепции атомарности в мире обычного и гетерогенного программирования, к которым изложение придёт в конце, поскольку эти вопросы традиционно сложны.
 
 \pagebreak
 \section{Структура памяти для графики}\label{sec:GPUMEM}
@@ -351,7 +351,7 @@ cl::Event evt = add_vecs(Args, A, B, C);
 
 \begin{figure}
 \centering
-\includegraphics[width=0.5\textwidth]{pictures/ocl-compilation-scheme.pdf}
+\includegraphics[width=0.7\textwidth]{pictures/ocl-compilation-scheme.pdf}
 \caption{Схема компиляции для (lst. \ref{lst:oclkern})}
 \label{fig:oclkern}
 \end{figure}
@@ -458,7 +458,124 @@ auto Event = Queue.submit(
 Устройства, имеющие один и тот же компилятор, один и тот же бинарный формат (например два GPU одного вендора) могут быть объединены в контекст. Простейший контекст это единственное устройство. Далее кернел, скомпилированный в контексте может быть поставлен в очередь на одно из его устройств.
 При этом поддерживается сквозная типизация, что уберегает от ошибок из-за несогласованности размеров и прочего.
 
-Далее для всех примеров будет использоваться SYCL.
+\subsection{Несогласованность имён}\label{subsec:names}
+
+В разных вычислительных API используются разные названия для разных логических видов памяти. Общая схема именований разной памяти, принятая в OpenCL и в SYCL показана на (рис. \ref{fig:logicalmemory}).
+
+\begin{figure}
+\centering
+\includegraphics[width=0.8\textwidth]{pictures/logical-memory.pdf}
+\caption{Логическая схема памяти в OpenCL и SYCL}
+\label{fig:logicalmemory}
+\end{figure}
+
+Но надо понимать, что в той же CUDA:
+\begin{itemize}
+\item \textbf{local} это то, что в SYCL называется private
+\item \textbf{shared} это то, что в SYCL называется local (или shared local)
+\item \textbf{unified} это то, что в SYCL называется shared (или unified shared)
+\item \textbf{device} это то, что в SYCL называется global или device.
+\end{itemize}
+
+В этом довольно легко запутаться. Далее для всех примеров будет использоваться SYCL (и соглашения об именованиях SYCL).
+
+\subsection{Память хоста и память устройств в SYCL}\label{subsec:memsend}
+
+В модели SYCL есть три основных способа пересылать память с хоста на устройство и обратно: использование аксессоров, использование общей памяти и непосредственная работа с памятью устройства.
+Все три способа надо хорошо знать, поэтому имеет смысл расмсотреть все.
+
+\textbf{Вариант 1: использование аксессоров}
+
+Аксессор это объект, действующий как массив в том адресном пространстве, которым он параметризован.
+По умолчанию это массив в глобальной памяти устройства.
+Поскольку в языке C++ нет понятия адресного пространства, аксессоры очень полезны, так как вводят эту концепцию на уровне библиотеки.
+
+\begin{figure}
+\centering
+\includegraphics[width=1.0\textwidth]{pictures/accessors.pdf}
+\caption{Идея аксессора}
+\label{fig:accessors}
+\end{figure}
+
+Идея аксессора показана на (рис. \ref{fig:accessors}), а код, использующий аксессор приведен на (lst. \ref{lst:accessors}).
+
+\begin{lstlisting}[caption={Использование аксессора},label={lst:accessors}]
+std::vector<T> AH = /* AX * AY matrix data */;
+
+// use buffer to send on device
+sycl::buffer<T, 2> BufA(AH.data(), AH.size());
+
+Queue.submit([&](sycl::handler &Cgh) { 
+  auto A = BufA.get_access<sycl_read>(Cgh);
+  // .....
+  auto Kernel = [=](sycl::id<2> Id) {
+    int Row = Id.get(0), Col = Id.get(1);
+    // use A[Row][Col] here
+\end{lstlisting}
+
+Тут следует обратить внимание, что аксессор может быть многомерным (например в примере lst. \ref{lst:accessors} он двумерный) и тогда он ведет себя как многомерный массив.
+
+\textbf{Вариант 2: общая память}
+
+Идея общей виртуальной памяти между устройством и хостом с общими адресами в едином адресном пространстве -- немыслима для графики.
+Но для вычислений это иногда ровно то, что нужно.
+Основная идея проиллюстрирована на (рис. \ref{fig:sharedmem}).
+
+\begin{lstlisting}[caption={Использование общей памяти},label={lst:sharedmem}]
+std::vector<T> AH = /* AX * AY matrix data */;
+
+// allocate shared memory and copy to device
+T *A = malloc_shared<T>(AX * AY, Queue);
+std::copy(AH.begin(), AH.end(), A);
+
+Queue.submit([&](sycl::handler &Cgh) { 
+  auto Kernel = [=](sycl::id<2> Id) {
+    int Row = Id.get(0), Col = Id.get(1);
+    // use A[Row * AY + Col] here
+\end{lstlisting}
+
+\begin{figure}
+\centering
+\includegraphics[width=0.6\textwidth]{pictures/sycl-device-and-shared-mem-v.pdf}
+\caption{Аксессор и общая память}
+\label{fig:sharedmem}
+\end{figure}
+
+Разумеется ручное управление через \lstinline!malloc_shared! выглядит немного наивно.
+Мы с вами пишем на C++ и, конечно, хотели бы использовать аллокаторы. К счастью это возможно.
+
+\begin{lstlisting}[caption={Аллокатор в общей памяти},label={lst:sharedalloc}]
+using AllocTy = usm_allocator<int, sycl::usm::alloc::shared>;
+AllocTy Alloc{DeviceQueue};
+std::vector<int, AllocTy> AData(AX * AY, Alloc);
+\end{lstlisting}
+
+Теперь память за программиста синхронизирует железо и управление памятью отдано контейнеру.
+Это отлично, но это немного расслабляет, иногда хочется очень точного контроля над происходящим.
+
+\textbf{Вариант 3: явное управление памятью}
+
+Этот вариант больше всего похож на OpenCL с его системой явного копирования (см. lst. \ref{lst:oclbuf}), только здесь, как показано на (lst. \ref{lst:devicemem}) копирование это метод в классе очереди.
+
+Вызов функции для выделения памяти устройства производится с хоста, но это не должно вводить в заблуждение: в конце концов clCreateBuffer тоже делается с хоста.
+Вообще автору кажется, что тот факт, что только хост может общаться с рантаймом, рано или поздно должен быть пересмотрен.
+
+\begin{lstlisting}[caption={Явная пересылка на устройство},label={lst:devicemem}]
+std::vector<T> AH;
+.....
+T *A = malloc_device<T>(AX * AY, Queue);
+auto EvtCpyData = Queue.copy(AH.data(), A, AH.size());
+.....
+Queue.submit([&](sycl::handler &Cgh) { 
+  Cgh.depends_on(EvtCpyData);
+  auto Kernel = [=](sycl::id<2> Id) {
+    // use A[Row * AY + Col] here
+\end{lstlisting}
+
+Попытка обратиться в память устройства с хоста приведет к ошибке времени выполнения.
+
+\textbf{Упражнение:} реализуйте сложение векторов на вашей системе всеми тремя способами. Измерьте по таймингам эвентов затраченное время.
+
 Главная задача дальнейшего изложения это показать как память в гетерогенных системах соотносится с обычной памятью в обычных программах на C++.
 Проще всего это достигается при рассмотрении конкретных примеров.
 Но чтобы рассматривать конкретные примеры надо договориться о конкретной архитектуре.
@@ -517,17 +634,93 @@ cl::sycl::free(C, Queue);
 \label{fig:syclscheme}
 \end{figure}
 
+LLVM IR для устройства имеет узнаваемый паттерн векторного сложения.
+
+\begin{lstlisting}[language=llvm,caption={Сложение векторов: device IR после SYCL компилятора},label={lst:syclvaddllvm}]
+%8 = getelementptr inbounds i32, i32 addrspace(1)* %1, i64 %5
+%9 = addrspacecast i32 addrspace(1)* %8 to i32 addrspace(4)*
+%10 = load i32, i32 addrspace(4)* %9, align 4
+%11 = getelementptr inbounds i32, i32 addrspace(1)* %2, i64 %5
+%12 = addrspacecast i32 addrspace(1)* %11 to i32 addrspace(4)*
+%13 = load i32, i32 addrspace(4)* %12, align 4
+%14 = add nsw i32 %10, %13
+%15 = getelementptr inbounds i32, i32 addrspace(1)* %0, i64 %5
+%16 = addrspacecast i32 addrspace(1)* %15 to i32 addrspace(4)*
+store i32 %14, i32 addrspace(4)* %16, align 4
+\end{lstlisting}
+
+Все загрузки делаются из \lstinline!addrspace(4)! это generic память (то есть память о которой мы ничего не можем сказать) поскольку компилятор SYCL консервативен и оставляет разрешение адресного пространства следующему за ним оптимизатору.
+
 \subsection{От SPIRV до VISA}\label{subsec:igc}
+
+После оптимизации графическим компилятором, включающей в том числе stateless-to-stateful преобразование, LLVM IR начинает выглядеть следующим образом.
+
+\begin{lstlisting}[language=llvm,caption={Сложение векторов: device IR после компилятора IGC},label={lst:syclvaddigc}]
+%5 = inttoptr i32 %4 to i32 addrspace(131073)*
+%6 = load i32, i32 addrspace(131073)* %5, align 4
+%7 = inttoptr i32 %4 to i32 addrspace(131074)*
+%8 = load i32, i32 addrspace(131074)* %7, align 4
+%9 = add nsw i32 %6, %8
+%10 = inttoptr i32 %4 to i32 addrspace(131072)*
+store i32 %9, i32 addrspace(131072)* %10, align 4
+\end{lstlisting}
+
+Обратите внимание на странную конструкцию \lstinline!i32 addrspace(131073)*!. По сути это та самая stateful память о которой шла речь в (\ref{subsec:stateful}).
+
+Далее полученное представление векторизуется и из него строится виртуальный ассемблер, который затем финализируется до физического (но везде ниже будет нужен только виртуальный).
+
+Виртуальный ассемблер для Intel XE задокументирован по ссылке:
+\href{https://github.com/intel/intel-graphics-compiler/blob/master/documentation/visa/1_introduction.md}{VISA introduction}
+
+Его главными особенностями являются: произвольное количество векторных регистров, не зависящие от архитектуры операции, символическое представление операций.
+
+\begin{lstlisting}[language={[x86masm]Assembler},caption={Сложение векторов: VISA ассемблер},label={lst:syclvaddvisa}]
+movs (M1_NM, 1) T6(0) 0x1:ud
+gather4_scaled.R (M1, 16) T6 0x0:ud V0054.0 V0056.0
+movs (M1_NM, 1) T6(0) 0x1:ud
+gather4_scaled.R (M5, 16) T6 0x0:ud V0055.0 V0057.0
+movs (M1_NM, 1) T6(0) 0x2:ud
+gather4_scaled.R (M1, 16) T6 0x0:ud V0054.0 V0058.0
+movs (M1_NM, 1) T6(0) 0x2:ud
+gather4_scaled.R (M5, 16) T6 0x0:ud V0055.0 V0059.0
+add (M1, 16) V0056(0,0)<1> V0056(0,0)<1;1,0> V0058(0,0)<1;1,0>
+add (M5, 16) V0057(0,0)<1> V0057(0,0)<1;1,0> V0059(0,0)<1;1,0>
+movs (M1_NM, 1) T6(0) 0x0:ud
+scatter4_scaled.R (M1, 16) T6 0x0:ud V0054.0 V0056.0
+movs (M1_NM, 1) T6(0) 0x0:ud
+scatter4_scaled.R (M5, 16) T6 0x0:ud V0055.0 V0057.0
+\end{lstlisting}
+
+Разберем для примера синтаксис \lstinline!gather4_scaled!. Это загрузка из stateful памяти которая берет аргументами BTI index, вектор смещений и заполняет регистр, указанный последним аргументом, значениями из памяти.
+Указание \lstinline!(M1, 16)! означает векторную операцию SIMD16, действующую на линиях с нулевой по пятнадцатую (инструкция также учитывает глобальную маску, которая может отключить дополнительные линии).
+Аналогично \lstinline!(M5, 16)! означает векторную операцию SIMD16, действующую на линиях с пятнадцатой по тридцать первую.
+Регистр \lstinline!T6! хранит BTI индекс.
+Константа \lstinline!0x0:ud! это база для чтения
+Регистр \lstinline!V0054! хранит вектор из 16-ти смещений, а регистр \lstinline!V0056! является регистром назначения.
+
+\textbf{Обсуждение:} компилятор делает stateless-to-stateful преобразование если видит, что указатель внутри кернела никто не использует сложнее чем индекс буфера плюс оффсет. Попробуйте его сломать: то есть напишите vector addition так чтобы это преобразование не применилось. Посмотрите какой ассемблер вы получите.
 
 \pagebreak
 \section{Пять главных задач на SYCL}\label{sec:FiveTasks}
 
 Каждый из примеров ниже относится к числу самых распространённых программ, отдаваемых на видеокарточки.
 И каждый из них может научить чему-то важному.
-Разумеется начать (и ввести все концепции, которые надо ввести) следует с перемножения матриц.
+Разумеется начать следует с перемножения матриц.
 Для GPGPU это задача задач и выполняя её хорошо, можно сделать очень и очень много практически важных вещей.
 
 \subsection{Перемножение матриц}\label{subsec:gemm}
+
+Традиционно в перемножении матриц важен ведущий размер, и, как показано на (рис. \ref{fig:iterspace}) именно ведущий размер будет далее обозначаться за X.
+Это немного контринтуитивно, но к этому можно быстро привыкнуть.
+
+\begin{figure}
+\centering
+\includegraphics[width=0.9\textwidth]{pictures/iter-space-matrix-single.pdf}
+\caption{Схема итерационного пространства при перемножении матриц}
+\label{fig:iterspace}
+\end{figure}
+
+
 % \subsection{Битоническая сортировка}\label{subsec:bitonic}
 % \subsection{Свёртки}\label{subsec:convolution}
 % \subsection{Гистограмма}\label{subsec:hist}

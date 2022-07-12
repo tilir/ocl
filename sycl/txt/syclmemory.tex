@@ -846,9 +846,203 @@ label3:
 
 \textbf{Обсуждение:} как вы думаете можно ли это соптимизировать графическим компилятором? Не торопитесь с ответом на этот вопрос, сначала внимательно прочитайте текст на эту тему \href{https://llvm.org/docs/Atomics.html#id5}{на llvm.org}.
 
-\subsection{Перемножение матриц: локальная память}\label{subsec:gemmlocal}
+Ещё одна идея, которая приходит в голову каждому человеку, знакомому с оптимизацией умножения матриц на CPU это транспонировать одну из матриц чтобы бежать во вложенном цикле по одному и тому же индексу, как это показано на (lst. \ref{lst:gemmtrans}).
+
+\begin{lstlisting}[caption={Перемножение матриц с предварительным транспонированием},label={lst:gemmtrans}]
+std::copy(Aptr, Aptr + AX * AY, A);
+for (int i = 0; i < AY; ++i)
+  for (int j = 0; j < BY; ++j)
+    B[j * AY + i] = Bptr[i * BY + j];
+// .....
+Queue.submit([&](sycl::handler &Cgh) {
+  // .....
+  auto K = [=](sycl::id<2> Id) {
+    const int Row = Id.get(0);
+    const int Col = Id.get(1);
+    for (int K = 0; K < AY; K++)
+      Sum += A[Row * AY + K] * B[Col * AY + K];
+    C[Row * BY + Col] = Sum;
+  };
+  Cgh.parallel_for<class m<T>>({AX, BY}, K);
+}
+\end{lstlisting}
+
+Можно также сделать транспонирование на MKL.
+Достаточно точно также как на (lst. \ref{lst:gemmtrans}) провести его в (lst. \ref{lst:gemmmkl}) вручную или специальной вспомогательной функцией до вызова \lstinline!mkl::blas::gemm! и информировать об этом библиотеку установкой \lstinline!TransB!.
+
+\begin{figure}
+\centering
+\includegraphics[width=1.0\textwidth]{pictures/sgemm_trans.pdf}
+\caption{Замеры, показывающие негативный эффект транспонирования на TGLLP}
+\label{fig:sgemm_trans}
+\end{figure}
+
+Результаты замеров показаны на (рис. \ref{fig:sgemm_trans}). Видно, что для транспонирования проведенного вручную они крайне негативны и причина этому -- расположение памяти в буфере. Интуиция с кешами CPU тут не работает, так как на видеокарте, если вы явно не попросите, обычно вообще нет кешей.
+
+\textbf{Обсуждение:} почему в случае OneMKL транспонирование не даёт отрицательного эффекта? Для ответа вам может понадобиться заглянуть как в исходники, так и в сгенерированный ассемблер.
+
+\subsection{Перемножение матриц: вложенный параллелизм}\label{subsec:gemmnested}
 
 Локальная память очень быстрая, но обычно её очень мало. Она делается из Static RAM -- это тот же материал из которого делаются кеши и одна её ячейка в разы дороже и потребляет в разы больше энергии чем ячейка Dynamic RAM.
+
+\begin{figure}
+\centering
+\includegraphics[width=0.5\textwidth]{pictures/iter-space-matrix-cache.pdf}
+\caption{Использование локальной памяти в перемножении матриц}
+\label{fig:gemmlocal}
+\end{figure}
+
+На (рис. \ref{fig:gemmlocal}) показана основная идея: совсем небольшой участок, также называемый tile (тайл) используется для обоих матриц для того чтобы идти по строчкам и столбцам и делать самые дорогие операции над локальной памятью.
+На TGLLP тайл это \lstinline!16 * 16! элементов т.к. больше локальное итерационное пространство просто не позволяет.
+Часть входных матриц копируется в этот тайл и далее после произведения операций, обновляется глобальная память результата.
+
+Можно начать опыты по использованию локальной памяти с явного (также известного как вложенного, nested) параллелизма, который поддержан в SYCL.
+Пример его использования приведён на (lst. \ref{lst:gemmnested}).
+
+\begin{lstlisting}[caption={Перемножение матриц, явный параллелизм},label={lst:gemmnested}]
+using LTy = sycl::accessor<T, 2, sycl_read_write, sycl_local>;
+LTy Asub{BlockSize, Cgh}, Bsub{BlockSize, Cgh};
+
+auto KernMul = [=](sycl::group<2> Group) {
+  sycl::private_memory<int, 2> Sum(Group);
+
+  Group.parallel_for_work_item([&](sycl::h_item<2> It) { 
+    Sum(It) = 0;
+  });
+
+  for (int Tile = 0; Tile < NumTiles; Tile++) {
+    Group.parallel_for_work_item([&](sycl::h_item<2> It) {
+      int GlobalRow = It.get_global_id(0);
+      int GlobalCol = It.get_global_id(1);
+      int Row = It.get_local_id(0);
+      int Col = It.get_local_id(1);
+      int TiledRow = LSZ * Tile + Row;
+      int TiledCol = LSZ * Tile + Col;
+
+      Asub[Row][Col] = A[GlobalRow][TiledCol];
+      Bsub[Row][Col] = B[TiledRow][GlobalCol];
+    });
+
+    Group.parallel_for_work_item([&](sycl::h_item<2> It) {
+      int Row = It.get_local_id(0);
+      int Col = It.get_local_id(1);
+
+      for (int K = 0; K < LSZ; K++)
+        Sum(It) += Asub[Row][K] * Bsub[K][Col];
+    });
+  }
+
+  Group.parallel_for_work_item([&](sycl::h_item<2> It) {
+    int GlobalRow = It.get_global_id(0);
+    int GlobalCol = It.get_global_id(1);
+    C[GlobalRow][GlobalCol] = Sum(It);
+  });
+};
+
+Cgh.parallel_for_work_group<class mmult_groups_priv<T>>(
+    NumGroups, BlockSize, KernMul);
+\end{lstlisting}
+
+Теперь кернел явно разбит на два уровня вложенных параллельных циклов: верхний \lstinline!parallel_for_work_group! и нижний уровень. Последний представлен несколькими \lstinline!parallel_for_work_item!.
+Специальная конструкция \lstinline!sycl::private_memory<int, 2>! нужна для того, чтобы информировать графический компилятор об использовании приватной памяти.
+В отличии от обычного \lstinline!parallel_for!, где приватная память это просто локальная переменная (как на lst. \ref{lst:gemmprivmem}), внутри специальной конструкции \lstinline!parallel_for_work_item! локальная переменная будет переменной в локальной памяти.
+
+Результаты этого опыта показаны на (рис. \ref{fig:sgemm_groups}) и их можно назвать удручающими.
+
+\begin{figure}
+\centering
+\includegraphics[width=1.0\textwidth]{pictures/sgemm_groups.pdf}
+\caption{Замеры, показывающие проблемы явного параллелизма на TGLLP}
+\label{fig:sgemm_groups}
+\end{figure}
+
+Во многом проблемы явного параллелизма это проблемы компилятора, который в данном случае должен сделать слишком много и не делает практически ничего.
+В частности компилятор должен расставить барьеры, поскольку рабочая группа, совместно работающая с локальной памятью это элемент коорперативной многозадачности.
+Первый же взгляд на visaasm показывает довольно плохой сгенерированный код.
+Есть надежда, что он будет существенно улучшен в следующих версиях OneAPI.
+
+\subsection{Разворот гнезда циклов}\label{subsec:gemmtransform}
+
+В общем случае идея перехода от гнезда циклов с самым вложенным \lstinline!parallel_for! к такому гнезду, где \lstinline!parallel_for! сверху в условиях когда присутствует локальная память делается как показано на (lst. \ref{lst:transition}).
+
+\begin{lstlisting}[caption={Разворот гнезда циклов},label={lst:transition}]
+for (auto i : Ni)
+  for (auto j : Nj)    
+    parallel for (auto k : Nk)
+      do(i, j, k); 
+
+// given Nk is small may be transformed to:
+
+parallel for (auto k : Nk)
+  for (auto i : Ni)
+    for (auto j : Nj) {
+      do(i, j, k); 
+
+      // wait all workitems
+      barrier(k);
+    }
+\end{lstlisting}
+
+Можно применить эту общую идею (она ещё будет нужна в битнической сортировке и далее) к циклу на (lst. \ref{lst:gemmnest}).
+Но лучше прежде немного упростить идею и показать этот цикл псевдокодом.
+Стартовая точка разворота это
+
+\begin{lstlisting}[caption={Гнездо циклов для GEMM},label={lst:gemmnest}]
+private S = 0;
+for (Tile = 0; Tile < NumTiles; ++Tile) {
+  parallel for(auto Wi: Workitems)
+    copy_global_to_local(Tile, Wi); 
+  parallel for(auto Wi: Workitems)
+    S = calculate_local_mmult(wi);
+}
+parallel for(auto Wi: Workitems)
+  update_global_memory(S, Wi); 
+\end{lstlisting}
+
+Чисто формально применяя идею (lst. \ref{lst:transition}), из (lst. \ref{lst:gemmnest}) можно получить (lst. \ref{lst:gemmnest2}).
+
+\begin{lstlisting}[caption={Формальное преобразование циклов для GEMM},label={lst:gemmnest2}]
+parallel for(auto Wi: Workitems)
+  for (Tile = 0; Tile < NumTiles; ++Tile) {
+    copy_global_to_local(Tile, Wi);
+    barrier;
+  }
+
+parallel for(auto Wi: Workitems)
+  for (Tile = 0; Tile < NumTiles; ++Tile) {
+    S = calculate_local_mmult(wi);
+    barrier;
+  }
+
+parallel for(auto Wi: Workitems)
+  update_global_memory(S, Wi); 
+\end{lstlisting}
+
+Пока что особой пользы не видно.
+Но тут и пряовляется волшебная сила барьера как примитива синхронизации.
+Поскольку далее, так как внутри разных параллельных посылок на барьере ожидается итерация фактически одного и того же цикла по тайлам, циклы можно смёржить, получив (lst. \ref{lst:gemmnest3}).
+
+\begin{lstlisting}[caption={Итоговое преобразование циклов для GEMM},label={lst:gemmnest3}]
+parallel for(auto Wi: Workitems) {
+  private S = 0;
+  for (Tile = 0; Tile < NumTiles; ++Tile) {
+    copy_global_to_local(Tile, Wi);
+    barrier;
+    S = calculate_local_mmult(wi);
+    barrier
+  }
+  update_global_memory(S, Wi);
+}
+\end{lstlisting}
+
+Эта техника очень полезна и, как станет ясно далее, очень практична.
+
+\textbf{Обсуждение:} почему мы можем надеяться что такое преобразование гнезда циклов поможет производительности?
+
+\subsection{Перемножение матриц: локальная память}\label{subsec:gemmlocal}
+
+Псевдокод (lst. \ref{lst:gemmnest3}) можно переписать настоящим кодом, от чего он не проигрывает, а только выигрывает в  читаемости.
+Результат приведён на (lst. \ref{lst:gemmlocal}).
 
 \begin{lstlisting}[caption={Перемножение матриц в локальной памяти},label={lst:gemmlocal}]
 Sum = 0; N = AY / LSZ;
@@ -864,37 +1058,67 @@ for (int Tile = 0; Tile < N; Tile++) {
 }
 \end{lstlisting}
 
+Замеры результатов работы такого кода приведены на (рис. \ref{fig:sgemm_lsz}).
+Видно, что наконец-то применение локлаьной памяти дало ожидаемый эффект и MKL baseline был решительно превзойдён.
+При этом использование максимально большого размера тайла улучшает производительность ещё сильнее.
 
+\begin{figure}
+\centering
+\includegraphics[width=1.0\textwidth]{pictures/sgemm_lsz.pdf}
+\caption{Замеры, показывающие положительный эффект локальной памяти на TGLLP}
+\label{fig:sgemm_lsz}
+\end{figure}
+
+Можно ли ещё улучшить этот результат?
+Да, если обратить внимание на один тонкий момент, а именно на то, что пока что здесь не обсуждался статус в памяти захваченных в кернел переменных.
+Например на (lst. \ref{lst:gemmpayload}) показано, что переменная LSZ известна в момент запуска кернела и всю работу кернела не изменяется.
+Но чем она является для кернела?
 
 \begin{lstlisting}[caption={Захваченные переменные в payload},label={lst:gemmpayload}]
-const int AY = AY_from_program_arguments;
+const int LSZ = LSZ_from_program_arguments;
 .....
 T *A = malloc_shared<T>(AX * AY, Queue);
 std::copy(AH.begin(), AH.end(), A);
 .....
 Queue.submit([&](sycl::handler &Cgh) { 
-  auto Kernmul = [=](sycl::id<2> Id) {
-    int Row = Id.get(0), Col = Id.get(1);
-    // here AY is used
+  auto Kernmul = [=](sycl::id<2> Id) {    
+    // here LSZ is used
 \end{lstlisting}
 
+Увы, возможности компилятора использовать такие переменные как есть сильно ограничены.
+Фактически захваченная переменная является частью так называемого пейлоада (payload) -- списка неявных аргументов кернела.
+То есть компилятор мог бы знать о ней всё, включая её значение, но он ничего не знает.
+Идея как можно помочь оптимизатору, используя специализационные константы (specialization constants) показана на (lst. \ref{lst:gemmspec}).
 
 \begin{lstlisting}[caption={Специализационные константы},label={lst:gemmspec}]
-int AY = AY_from_program_arguments;
-constexpr sycl::specialization_id<int> AYC;
+int LSZ = LSZ_from_program_arguments;
+constexpr sycl::specialization_id<int> LSZC;
 .....
 DeviceQueue.submit([&](sycl::handler &Cgh) {
-  Cgh.template set_specialization_constant<AYC>(AY);
+  Cgh.template set_specialization_constant<LSZC>(LSZ);
   auto Kernmul = [=](sycl::id<2> Id, sycl::kernel_handler Kh) {
     int Row = Id.get(0), Col = Id.get(1);    
-    const int AYK = Kh.get_specialization_constant<AYC>();
-    // here AYK is used
+    const int LSZK = Kh.get_specialization_constant<LSZC>();
+    // here LSZK is used
 \end{lstlisting}
 
-\subsection{Перемножение матриц: внезапные трудности}\label{subsec:gemmproblem}
+Естественной критикой такого подхода является то, что теперь AOT компиляция заблокирована и программист не управляет моментом перекомпиляции кернела во время исполнения.
+Это решается посредством использование kernel bundles.
 
+% TODO: тут про kernel bundles
 
-% \subsection{Битоническая сортировка}\label{subsec:bitonic}
+Итоговые замеры приведены на (рис. \ref{fig:sgemm_lsz_spec}) и являются потрясающими. Фактически MKL baseline превзойдён в четыре раза по производительности.
+
+\begin{figure}
+\centering
+\includegraphics[width=1.0\textwidth]{pictures/sgemm_lsz_spec.pdf}
+\caption{Замеры, показывающие комбо из локальной памяти и специализационных констант}
+\label{fig:sgemm_lsz_spec}
+\end{figure}
+
+\textbf{Упражнение:} улучшат ли специализационные константы кернел без локальной памяти? Выскажите гипотезу, проведите замеры, посмотрите ассемблер, объясните результат.
+
+\subsection{Битоническая сортировка}\label{subsec:bitonic}
 % \subsection{Свёртки}\label{subsec:convolution}
 % \subsection{Гистограмма}\label{subsec:hist}
 % \subsection{Редукции}\label{subsec:reduction}

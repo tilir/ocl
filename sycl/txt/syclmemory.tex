@@ -464,7 +464,7 @@ auto Event = Queue.submit(
 
 \begin{figure}
 \centering
-\includegraphics[width=0.8\textwidth]{pictures/logical-memory.pdf}
+\includegraphics[width=1.0\textwidth]{pictures/logical-memory.pdf}
 \caption{Логическая схема памяти в OpenCL и SYCL}
 \label{fig:logicalmemory}
 \end{figure}
@@ -492,7 +492,7 @@ auto Event = Queue.submit(
 
 \begin{figure}
 \centering
-\includegraphics[width=1.0\textwidth]{pictures/accessors.pdf}
+\includegraphics[width=0.6\textwidth]{pictures/accessors.pdf}
 \caption{Идея аксессора}
 \label{fig:accessors}
 \end{figure}
@@ -536,7 +536,7 @@ Queue.submit([&](sycl::handler &Cgh) {
 
 \begin{figure}
 \centering
-\includegraphics[width=0.6\textwidth]{pictures/sycl-device-and-shared-mem-v.pdf}
+\includegraphics[width=0.4\textwidth]{pictures/sycl-device-and-shared-mem-v.pdf}
 \caption{Аксессор и общая память}
 \label{fig:sharedmem}
 \end{figure}
@@ -629,7 +629,7 @@ cl::sycl::free(C, Queue);
 
 \begin{figure}
 \centering
-\includegraphics[width=1.1\textwidth]{pictures/sycl-scheme.pdf}
+\includegraphics[width=1.0\textwidth]{pictures/sycl-scheme.pdf}
 \caption{Схема компиляции до бинарника со SPIRV секциями}
 \label{fig:syclscheme}
 \end{figure}
@@ -703,22 +703,195 @@ scatter4_scaled.R (M5, 16) T6 0x0:ud V0055.0 V0057.0
 \pagebreak
 \section{Пять главных задач на SYCL}\label{sec:FiveTasks}
 
-Каждый из примеров ниже относится к числу самых распространённых программ, отдаваемых на видеокарточки.
-И каждый из них может научить чему-то важному.
-Разумеется начать следует с перемножения матриц.
+Пятью главными базовыми задачами, которые решаются на видеокарточках являются:
+
+\begin{enumerate}
+\item Перемножение матриц
+\item Сортировка
+\item Свёртки
+\item Редукция
+\item Гистограмма
+\end{enumerate}
+
+Разумеется на видеокарточках решается масса более сложных задач, но, если к ним приглядеться, они обычно распадаются на эти составляющие.
+Например что такое inference в сверточной нейросети?
+Это перемножение матриц плюс свёртка плюс редукция.
+
+Разумеется начать обсуждение главных задач следует с перемножения матриц.
 Для GPGPU это задача задач и выполняя её хорошо, можно сделать очень и очень много практически важных вещей.
 
-\subsection{Перемножение матриц}\label{subsec:gemm}
+\subsection{Перемножение матриц (приватная память)}\label{subsec:gemm}
 
-Традиционно в перемножении матриц важен ведущий размер, и, как показано на (рис. \ref{fig:iterspace}) именно ведущий размер будет далее обозначаться за X.
+На (рис. \ref{fig:iterspace}) изображена схема итерационного пространства при умножении матрицы размерами \lstinline!AX * AY! на матрицу, размерами \lstinline!AY * BY!. Каждый поток обрабатывает один элемент итерационного пространства, размером \lstinline!AX * BY!.
+
+Традиционно в перемножении матриц важен ведущий размер, и, как показано на (рис. \ref{fig:iterspace}) именно ведущий размер обозначается за размер X: например в AX или в BX (но вместо него используется AY).
 Это немного контринтуитивно, но к этому можно быстро привыкнуть.
 
 \begin{figure}
 \centering
-\includegraphics[width=0.9\textwidth]{pictures/iter-space-matrix-single.pdf}
+\includegraphics[width=0.5\textwidth]{pictures/iter-space-matrix-single.pdf}
 \caption{Схема итерационного пространства при перемножении матриц}
 \label{fig:iterspace}
 \end{figure}
+
+Максимально наивное перемножение приведено на (lst. \ref{lst:gemmnoprivmem}). Здесь написано ровно то, что изображено на рисунке: каждый следующий элемент матрицы \lstinline!C[Row][Col]! формируется отдельным потоком как сумма произведений строки и столбца исходных матриц.
+
+\begin{lstlisting}[caption={Наивное перемножение матриц без приватной памяти},label={lst:gemmnoprivmem}]
+Queue.submit([&](sycl::handler &Cgh) {
+  // .....
+  auto K = [=](sycl::id<2> Id) {
+    const int Row = Id.get(0);
+    const int Col = Id.get(1);
+    for (int K = 0; K < AY; K++)
+      C[Row][Col] += A[Row][K] * B[K][Col];     
+  };
+  Cgh.parallel_for<class m<T>>({AX, BY}, K);
+}
+\end{lstlisting}
+
+Здесь можно задаться вопросом: а какое адресное пространство у переменных \lstinline!Row!, \lstinline!Col! и \lstinline!K!?
+Будь эти переменные переменнымив  обычной программе на CPU, они были бы выделены на регистрах.
+В программе на GPU они находятся в \textbf{приватной} памяти.
+Она уже вскользь упоминалась на схеме (рис. \ref{fig:logicalmemory})
+Идея в большем разрешении показана на (рис. \ref{fig:privatemem}).
+
+\begin{figure}
+\centering
+\includegraphics[width=0.3\textwidth]{pictures/sycl-privatemem-shorter.pdf}
+\caption{Идея приватной памяти}
+\label{fig:privatemem}
+\end{figure}
+
+Своё небольшое количество приватной памяти доступно каждому логчиескому потоку.
+Это даёт идею переписать код, используя аккумулятор в приватной памяти, как показано на (lst. \ref{lst:gemmprivmem}).
+
+\begin{lstlisting}[caption={Перемножение матриц с использованием приватной памяти},label={lst:gemmprivmem}]
+T Sum = 0;
+for (int K = 0; K < AY; K++)
+  Sum += A[Row][K] * B[K][Col];
+C[Row][Col] = Sum;
+\end{lstlisting}
+
+Разумеется, внимательный читатель имеет основания задаться вопросом: зачем вообще писать умножение матриц с нуля, неужели нет доступной библиотечной реализации?
+В случае SYCL стандартной библиотеки нет, но есть Intel oneMKL, построенная на основе библиотеки Blas и поддерживающая близкий к ней интерфейс.
+Реализация перемножения с использованием этой библиотеки (собственно в один вызов) показана на (lst. \ref{lst:gemmmkl}).
+
+\begin{lstlisting}[caption={Перемножение матриц с использованием библиотеки MKL},label={lst:gemmmkl}]
+auto *A = sycl::malloc_shared<T>(AX * AY, DeviceQueue);
+auto *B = sycl::malloc_shared<T>(AY * BY, DeviceQueue);
+auto *C = sycl::malloc_shared<T>(AX * BY, DeviceQueue);
+std::copy(Aptr, Aptr + AX * AY, A);
+std::copy(Bptr, Bptr + AY * BY, B);
+
+// multiplication with MKL library
+std::vector<sycl::event> GemmDependencies;
+float Alpha = 1.0f, Beta = 0.0f;
+mkl::transpose TransA = mkl::transpose::nontrans;
+mkl::transpose TransB = mkl::transpose::nontrans;
+mkl::blas::gemm(DeviceQueue, TransA, TransB, AX, BY, AY,
+                Alpha, A, AX, B, AY, Beta, C, AX, GemmDependencies);
+\end{lstlisting}
+
+\textbf{Обсуждение:} какие недоcтатки вы видите в использовании oneMKL?
+При ответе подумайте о том, что она существует по сути только для двух типов: float и double.
+Даже перемножение целочисленных матриц с использованием этой библиотеки будет проблемой.
+
+Результаты замеров самописного произведения с приватной памятью, без неё и с использованием OneMKL показаны на (рис. \ref{fig:sgemm_priv}). Видно, что использование приватной памяти делает ситуацию в разы лучше (и вровень с MKL), а попытка без неё обойтись приводит к очень печальному эффекту.
+
+\begin{figure}
+\centering
+\includegraphics[width=1.0\textwidth]{pictures/sgemm_priv.pdf}
+\caption{Замеры, показывающие эффект приватной памяти на TGLLP}
+\label{fig:sgemm_priv}
+\end{figure}
+
+Как объяснить эти замеры и за счёт чего происходит такая просадка? 
+Многое становится ясным, если посмотреть виртуальный ассемблер для Intel XE (см. \ref{subsec:igc}), полученный в обоих случаях. Сравните (lst. \ref{lst:visapriv}) и (lst. \ref{lst:visanopriv}).
+В обоих случаях очевиден SIMD32 dispatch, но обратная дуга идёт совершенно по разному.
+
+\begin{lstlisting}[language={[x86masm]Assembler},caption={VISA ассемблер: счётчик в приватной памяти},label={lst:visapriv}]
+label5:
+  ...
+  gather4_scaled.R (M1, 16) T6 0x0:ud V192.0 V194.0
+  gather4_scaled.R (M5, 16) T6 0x0:ud V193.0 V195.0
+  mad (M1, 16) V116(0,0)<1> V194(0,0)<1;1,0>
+               V175(0,0)<1;1,0> V116(0,0)<1;1,0>
+  mad (M5, 16) V117(0,0)<1> V195(0,0)<1;1,0>
+               V176(0,0)<1;1,0> V117(0,0)<1;1,0>
+  ...
+  goto (M1, 1) label5
+  ...
+  scatter4_scaled.R (M1, 16) T6 0x0:ud V227.0 V116.0
+  scatter4_scaled.R (M5, 16) T6 0x0:ud V228.0 V117.0
+\end{lstlisting}
+
+В случае использования приватной памяти накопление суммы произведений происходит в регистрах \lstinline!V116! и \lstinline!V117!, которые сохраняются в память после завершения цикла. Это делает всего две записи в память на цикл.
+
+\begin{lstlisting}[language={[x86masm]Assembler},caption={VISA ассемблер: приватная память не использована},label={lst:visanopriv}]
+label3:
+  ...
+  gather4_scaled.R (M1, 16) T6 0x0:ud V229.0 V264.0
+  gather4_scaled.R (M5, 16) T6 0x0:ud V230.0 V265.0
+  mad (M1, 16) V264(0,0)<1> V262(0,0)<1;1,0>
+               V237(0,0)<1;1,0> V264(0,0)<1;1,0>
+  mad (M5, 16) V265(0,0)<1> V263(0,0)<1;1,0>
+               V238(0,0)<1;1,0> V265(0,0)<1;1,0>
+  scatter4_scaled.R (M1, 16) T6 0x0:ud V229.0 V264.0
+  scatter4_scaled.R (M5, 16) T6 0x0:ud V230.0 V265.0
+  ....
+  goto (M1, 1) label3
+\end{lstlisting}
+
+Без использования приватной памяти, накопление осуществляется сразу в памяти и, как видно из (lst. \ref{lst:visanopriv}) происходит немыслимое количество ненужных операций записи в память.
+
+\textbf{Обсуждение:} как вы думаете можно ли это соптимизировать графическим компилятором? Не торопитесь с ответом на этот вопрос, сначала внимательно прочитайте текст на эту тему \href{https://llvm.org/docs/Atomics.html#id5}{на llvm.org}.
+
+\subsection{Перемножение матриц: локальная память}\label{subsec:gemmlocal}
+
+Локальная память очень быстрая, но обычно её очень мало. Она делается из Static RAM -- это тот же материал из которого делаются кеши и одна её ячейка в разы дороже и потребляет в разы больше энергии чем ячейка Dynamic RAM.
+
+\begin{lstlisting}[caption={Перемножение матриц в локальной памяти},label={lst:gemmlocal}]
+Sum = 0; N = AY / LSZ;
+for (int Tile = 0; Tile < N; Tile++) {
+  const int TX = LSZ * Tile + LX;
+  const int TY = LSZ * Tile + LY;
+  AL[TX][TY] = A[GX * AY + TX];
+  BL[TX][TY] = B[TX * BY + GY];
+  It.barrier(sycl_local_fence);
+  for (int K = 0; K < LSZ; K++)
+    Sum += AL[LX][K] * BL[K][LY];
+  It.barrier(sycl_local_fence);
+}
+\end{lstlisting}
+
+
+
+\begin{lstlisting}[caption={Захваченные переменные в payload},label={lst:gemmpayload}]
+const int AY = AY_from_program_arguments;
+.....
+T *A = malloc_shared<T>(AX * AY, Queue);
+std::copy(AH.begin(), AH.end(), A);
+.....
+Queue.submit([&](sycl::handler &Cgh) { 
+  auto Kernmul = [=](sycl::id<2> Id) {
+    int Row = Id.get(0), Col = Id.get(1);
+    // here AY is used
+\end{lstlisting}
+
+
+\begin{lstlisting}[caption={Специализационные константы},label={lst:gemmspec}]
+int AY = AY_from_program_arguments;
+constexpr sycl::specialization_id<int> AYC;
+.....
+DeviceQueue.submit([&](sycl::handler &Cgh) {
+  Cgh.template set_specialization_constant<AYC>(AY);
+  auto Kernmul = [=](sycl::id<2> Id, sycl::kernel_handler Kh) {
+    int Row = Id.get(0), Col = Id.get(1);    
+    const int AYK = Kh.get_specialization_constant<AYC>();
+    // here AYK is used
+\end{lstlisting}
+
+\subsection{Перемножение матриц: внезапные трудности}\label{subsec:gemmproblem}
 
 
 % \subsection{Битоническая сортировка}\label{subsec:bitonic}
